@@ -1,0 +1,2079 @@
+Absolutely — and this is a **very strong direction** for a hackathon if you execute it as a real product (not just a diagram canvas).
+
+Below is a **detailed PRD** for your product, tailored to:
+
+* **Frontend:** Next.js (App Router)
+* **Backend/Data/Realtime:** Convex
+* **Deployment:** Vercel (Next.js app)
+* **Goal:** visual architecture planning + decision intelligence + handoff to coding tools
+
+I also included implementation guidance grounded in current docs (Next.js App Router, Route Handlers, caching/rendering, Convex functions/auth/storage/search, Vercel deployment/envs). ([Next.js][1])
+
+---
+
+# Product Requirements Document
+
+## Product Name
+
+**Preflight** (working name)
+
+## Product Category
+
+AI-assisted developer tooling / architecture planning platform
+
+## One-line Product Definition
+
+A visual, AI-powered architecture planning layer that helps developers design, compare, validate, and export implementation-ready plans **before** building in Cursor/Lovable/Claude Code/etc.
+
+---
+
+# 1) Problem Statement
+
+## Core Problem
+
+AI coding tools are excellent at generating code quickly, but architecture planning is still:
+
+* **text-heavy**
+* **fragmented**
+* hard to compare
+* hard to validate
+* not feature-aware
+* not exportable into a reliable implementation sequence
+
+Users often paste an app idea into a chat and get a plan that:
+
+* may be technically okay,
+* but hides trade-offs (cost, complexity, lock-in, ops burden),
+* and is hard to reason about visually.
+
+## Why existing tools are not enough
+
+Tools like Cursor / Claude Code / Lovable can provide planning output, but mostly as **chat text**. Your product is not replacing them — it is the **planning and decision layer** before coding.
+
+**Positioning:**
+
+> “We make architecture decisions visible, comparable, and implementation-ready.”
+
+---
+
+# 2) Goals
+
+## Primary Goal
+
+Build a web app where a user can:
+
+1. Describe an app idea and constraints
+2. Get a generated architecture on a visual canvas
+3. See architecture scores and trade-offs
+4. Compare alternatives
+5. Get linting/risk warnings
+6. Export an implementation handoff bundle
+
+## Secondary Goals
+
+* Make the UX polished and demo-friendly for hackathon judging
+* Support feature-level planning (not only whole-system planning)
+* Keep MVP realistic for a hackathon while still looking “deep”
+
+---
+
+# 3) Non-Goals (for MVP)
+
+Do **not** build in the hackathon MVP:
+
+* Exact cloud pricing for every provider/service
+* Full live billing API integrations from AWS/GCP/Azure
+* Full IaC generation (Terraform for every provider)
+* Multi-user collaboration + comments
+* Production-grade auth/permissions model for org teams
+* Full SDK integrations with Cursor/Lovable (export format is enough)
+
+---
+
+# 4) Target Users
+
+## Primary
+
+* Hackathon participants
+* Indie devs / vibe coders
+* Startup builders
+* Junior-mid developers unsure about cloud/service choices
+
+## Secondary
+
+* Senior devs who want a fast architecture sketch + trade-off compare
+* Technical PMs / founders who need build plans before coding
+
+---
+
+# 5) Success Criteria (MVP)
+
+## Product Success (Hackathon)
+
+* A user can generate and edit a visual architecture in < 2 minutes
+* System can produce at least 2 alternative architectures
+* Scoring engine outputs clear trade-offs (cost/complexity/dev speed/etc.)
+* Linter flags at least 5 meaningful issues
+* Export produces a handoff bundle (PRD summary + build order + prompts)
+
+## Demo Success
+
+During the demo, judges can clearly see:
+
+* visual canvas
+* AI generation
+* scoring
+* comparison
+* linting
+* export/handoff
+
+---
+
+# 6) Core Product Concept
+
+## Product Pillars
+
+1. **Visual planning canvas**
+2. **Decision intelligence**
+3. **Architecture linting**
+4. **Feature-first planning**
+5. **Implementation handoff**
+
+## Core Differentiator
+
+Not just “draw boxes and arrows,” but:
+
+* score,
+* compare,
+* validate,
+* and convert architecture into a practical implementation sequence.
+
+---
+
+# 7) Functional Scope (MVP + Stretch)
+
+## MVP Features (must-have)
+
+1. Project creation & onboarding
+2. Visual architecture canvas
+3. Component library (frontend/backend/db/cache/auth/storage/queue/AI/etc.)
+4. Constraints input (budget, team size, timeline, region, etc.)
+5. AI-assisted architecture generation
+6. Scoring engine
+7. Architecture linter
+8. Alternative compare mode
+9. Feature planner
+10. Export bundle (JSON + markdown + prompt pack)
+
+## Stretch Features
+
+* Usage simulation (traffic tiers)
+* Version history / snapshots
+* “Generate tickets” for implementation
+* Mermaid export + starter folder structure
+* Convex/Next.js-specific blueprint templates
+* Shareable public link
+
+---
+
+# 8) Technical Architecture (Your Stack)
+
+## Frontend
+
+* **Next.js App Router**
+* TypeScript
+* Tailwind CSS
+* React Flow (or similar) for node/edge canvas
+* Zustand (or Convex-driven state + local UI store split)
+* Framer Motion (optional polish)
+* shadcn/ui (optional UI kit)
+
+Next.js App Router is ideal because it supports modern server/client boundaries and route conventions cleanly. ([Next.js][1])
+
+## Backend + Realtime + DB
+
+* **Convex**
+
+  * database
+  * queries/mutations/actions
+  * auth integration
+  * file storage (optional for exports / assets)
+  * scheduling (optional for async jobs)
+  * HTTP actions (optional for webhook/import/export endpoints)
+
+Convex functions are a strong fit because:
+
+* queries are reactive and cached/subscribable
+* mutations are transactional
+* actions are for third-party API calls (LLM, embeddings, etc.) ([Convex Developer Hub][2])
+
+## Deployment
+
+* **Vercel** for Next.js frontend
+* Convex hosted deployment for backend/database
+
+Vercel is zero-config for Next.js and handles previews/envs well. ([Vercel][3])
+
+---
+
+# 9) Product Information Architecture (Pages & Routes)
+
+This section is intentionally detailed per your request.
+
+---
+
+## 9.1 Landing Page (`/`)
+
+### Purpose
+
+Public marketing and entry point.
+
+### Sections
+
+1. **Hero**
+
+   * Product title
+   * One-line value prop
+   * CTA: “Start Planning”
+   * CTA secondary: “See Demo Architecture”
+
+2. **How it works**
+
+   * Step 1: Describe app
+   * Step 2: Visual architecture generated
+   * Step 3: Compare / lint / export
+
+3. **Feature highlights**
+
+   * Visual planning
+   * Scoring
+   * Linting
+   * Handoff to AI coding tools
+
+4. **Example outputs**
+
+   * Static screenshots / mock examples
+
+5. **Footer**
+
+   * Docs, privacy, GitHub, team info
+
+### Implementation Notes
+
+* Mostly static page (Server Component)
+* Can use partial prerendering/caching later, but keep MVP simple
+* Track CTA clicks via analytics event
+
+---
+
+## 9.2 Auth Entry (`/sign-in`, `/sign-up`) [Optional MVP / can stub]
+
+### Purpose
+
+User authentication if you want persistent projects.
+
+### Recommendation for Hackathon
+
+Use **Clerk + Convex integration** for the smoothest Next.js + Convex path, rather than Convex Auth beta, because Convex Auth’s Next.js server-side support is still described as under active development/beta. ([Convex Developer Hub][4])
+
+### UI
+
+* Sign in / sign up
+* OAuth buttons
+* Redirect to `/dashboard`
+
+---
+
+## 9.3 Dashboard (`/dashboard`)
+
+### Purpose
+
+List all user projects + create new project.
+
+### Components
+
+1. **Top bar**
+
+   * Product logo
+   * User avatar/menu
+   * “New Project” button
+
+2. **Project cards list**
+
+   * Name
+   * Last modified
+   * Score snapshot (optional)
+   * Tags (MVP / Production / AI app)
+   * “Open” CTA
+
+3. **New Project Modal**
+
+   * Project name
+   * Short description
+   * Use-case template (optional)
+   * “Start from blank” / “Generate from prompt”
+
+4. **Recent Templates**
+
+   * SaaS app
+   * AI chatbot
+   * Marketplace
+   * Internal tool
+   * Real-time app
+
+### Convex Data
+
+* `projects` query (by user)
+* `projects.create` mutation
+* `projects.archive` mutation (optional)
+
+### UX Notes
+
+* This page should feel fast and clean
+* No complex canvas loaded here
+
+---
+
+## 9.4 Project Workspace (`/project/[projectId]`)
+
+This is the **main product page**.
+
+### Layout (3-column recommended)
+
+1. **Left Sidebar** – Components + Features + Layers
+2. **Center Canvas** – Architecture visual editor
+3. **Right Panel** – AI Assistant / Inspector / Lint / Score tabs
+
+### Top Toolbar
+
+* Project name (editable)
+* Save status
+* “Generate” button
+* “Compare” button
+* “Lint” button
+* “Export” button
+* “Simulate” (stretch)
+* Undo/redo
+* Share (stretch)
+
+### Bottom Status/Scenario Bar
+
+* Users
+* Traffic level
+* Data volume
+* Regions
+* Uptime target
+* Budget cap
+* Timeline
+* Team size
+
+This matches your inspiration image style well and makes the tool look serious.
+
+---
+
+# 10) Main Workspace Features (Detailed Implementation)
+
+---
+
+## 10.1 Visual Canvas Editor (Core)
+
+### Purpose
+
+Interactive node/edge editor for architecture planning.
+
+### User Actions
+
+* Drag component from sidebar
+* Place on canvas
+* Connect components
+* Select node to edit properties
+* Delete/duplicate node
+* Pan/zoom
+* Auto-layout (optional)
+* Group nodes by layer (frontend/backend/data/infra)
+
+### Node Types (MVP)
+
+At minimum:
+
+**Frontend**
+
+* Next.js Web App
+* React SPA
+* Mobile App (generic)
+
+**Backend**
+
+* Convex Backend
+* API Gateway (generic)
+* Worker / Job Runner
+* External API
+
+**Data**
+
+* Convex DB
+* Postgres (external option)
+* Redis / Cache
+* Vector Index / Embeddings Store
+
+**Auth**
+
+* Clerk
+* Auth0
+* Convex Auth (beta label)
+* “Custom Auth” generic node
+
+**Storage**
+
+* Convex File Storage
+* S3 / R2 generic object storage
+
+**AI**
+
+* LLM Provider
+* Embeddings Provider
+* Moderation / Classification node
+
+**Infra / Ops**
+
+* Queue
+* Cron/Scheduler
+* CDN
+* Analytics
+* Monitoring
+
+### Data Model for Nodes
+
+Each node should store:
+
+* `id`
+* `type`
+* `category`
+* `provider` (e.g., “convex”, “vercel”, “clerk”)
+* `position` `{x, y}`
+* `label`
+* `config` object (schema by type)
+* `tags` (e.g., “realtime”, “serverless”, “ai”)
+* `metadata`:
+
+  * estimated cost hints
+  * complexity score hint
+  * capabilities
+  * constraints
+  * docs references (optional)
+
+### Data Model for Edges
+
+Each edge stores:
+
+* `id`
+* `sourceNodeId`
+* `targetNodeId`
+* `relationshipType`
+
+  * `reads`
+  * `writes`
+  * `authenticates`
+  * `uploads_to`
+  * `invokes`
+  * `queues`
+  * `subscribes`
+* `protocol` (HTTP/WebSocket/RPC/etc.)
+* `metadata`
+
+  * latency critical?
+  * sync vs async
+  * traffic estimate
+
+### Implementation Pointers
+
+* Use React Flow for rendering and interaction
+* Keep canvas state local for snappy interaction (Zustand)
+* Persist snapshots to Convex on debounce (e.g., every 1–2s after changes)
+* Store canonical graph in Convex
+
+### Algorithms
+
+#### A) Graph Validation (basic)
+
+Run on every save/generate/lint:
+
+* Detect disconnected nodes
+* Detect cycles where not allowed (optional per edge type)
+* Detect missing critical node types (e.g., no data store for persistent app)
+* Detect duplicate role nodes (e.g., 2 auth systems accidentally)
+
+Use:
+
+* adjacency map
+* DFS/BFS for connectivity
+* simple rule checks by node category
+
+---
+
+## 10.2 AI “Generate Architecture” Flow (Core)
+
+### Purpose
+
+Convert a text idea + constraints into an initial architecture graph.
+
+### User Input
+
+Prompt examples:
+
+* “Build an AI note app with file uploads and chat, 5k users, low budget”
+* “Create a B2B CRM with auth, role-based access, exports, and analytics”
+
+### Inputs to Generation Engine
+
+1. Product prompt
+2. Constraints
+
+   * budget
+   * timeline
+   * team size
+   * preferred providers
+   * region/compliance
+   * traffic expectations
+3. Feature list (optional)
+4. Existing canvas graph (if refining)
+
+### Output
+
+* generated nodes
+* generated edges
+* rationale
+* assumptions
+* confidence flags
+
+### Backend Execution
+
+Use a **Convex Action** for AI generation (external API call required). Convex actions are specifically the right place for external API calls and have different constraints than queries/mutations. ([Convex Developer Hub][5])
+
+### Generation Pipeline (Algorithm)
+
+#### Step 1: Prompt Parsing
+
+Extract:
+
+* app type
+* required features
+* scale hints
+* non-functional requirements
+* constraints
+
+Implementation:
+
+* LLM structured JSON output (strict schema)
+* fallback regex/heuristics if parsing fails
+
+#### Step 2: Capability Mapping
+
+Map features → required capabilities:
+
+* Auth
+* Persistence
+* Realtime
+* File uploads
+* Search
+* Vector retrieval
+* Background jobs
+* Email/webhooks
+* Analytics
+
+#### Step 3: Component Selection
+
+Use a weighted rules engine:
+
+* if `realtime=true` and stack preference neutral → prefer Convex-native realtime model
+* if `file_uploads=true` → include Convex File Storage (or external object store)
+* if `ai_chat=true` → include LLM + embeddings/vector flow
+* if `budget_low=true` → prefer fewer moving parts
+
+#### Step 4: Topology Assembly
+
+Construct graph templates:
+
+* frontend → auth → backend/data
+* frontend → file upload → storage
+* backend/action → LLM provider
+* action → vector search/action pipeline
+* webhooks → HTTP action endpoint
+
+#### Step 5: Score + Lint
+
+Immediately run scoring and linting on generated graph.
+
+#### Step 6: Persist
+
+Store graph version + assumptions in Convex.
+
+### Important Product Quality Rule
+
+LLM should **not** directly generate arbitrary node IDs/edge internals without validation.
+Instead:
+
+* LLM proposes structured architecture
+* Rules engine validates/transforms
+* Final graph canonicalized server-side
+
+---
+
+## 10.3 Constraints Panel (Core)
+
+### Purpose
+
+Guide architecture choices based on realistic constraints.
+
+### Constraint Fields (MVP)
+
+* **Budget target** (Low / Medium / High)
+* **Team size** (1, 2–3, 4+)
+* **Timeline** (Hackathon / 1 month / 3+ months)
+* **Traffic expectation**
+* **Data sensitivity** (Low / Medium / High)
+* **Region count**
+* **Uptime target**
+* **Developer experience preference**
+
+  * fastest MVP
+  * balanced
+  * scale-ready
+* **Provider preferences**
+
+  * must use Vercel
+  * must use Convex
+  * avoid AWS complexity
+  * etc.
+
+### Implementation Notes
+
+* Store constraints in `projects` document
+* Changes should trigger score recalculation
+* Optionally show “architecture now violates constraints” badges
+
+### Algorithm
+
+Constraint compatibility score:
+
+* For each node/provider, maintain metadata:
+
+  * cost profile
+  * complexity profile
+  * operational burden
+  * lock-in level
+* Aggregate graph profile and compare against constraints
+
+---
+
+## 10.4 Architecture Scoring Engine (Core Differentiator)
+
+### Purpose
+
+Score the current architecture so users can make trade-offs.
+
+### Output Dimensions (MVP)
+
+Each dimension 1–10 + explanation:
+
+1. **Build Speed**
+2. **Complexity**
+3. **Scalability**
+4. **Operational Burden**
+5. **Estimated Cost**
+6. **Vendor Lock-in Risk**
+7. **Reliability Risk**
+8. **AI-readiness** (for AI features)
+
+### Scoring Engine Design
+
+Use a hybrid approach:
+
+* **Rule-based scoring** (deterministic)
+* **LLM explanation layer** (human-readable rationale)
+
+Do **not** rely on LLM alone for numeric scores.
+
+### Scoring Algorithm (Detailed)
+
+#### A) Node Base Weights
+
+Each node type/provider has base weights, e.g.:
+
+* `Convex Backend`: build speed +3, ops burden -2, realtime +3
+* `Redis Cache`: complexity +1, scalability +2, ops +1
+* `Queue`: complexity +1, reliability +2
+
+#### B) Edge/Pattern Adjustments
+
+Patterns add bonuses/penalties:
+
+* LLM in synchronous request path → cost risk +2, latency risk +2
+* file uploads without async processing → reliability risk +1
+* no queue but long-running tasks present → ops risk +2
+* no auth for user data app → critical lint (not just score)
+
+#### C) Constraint-aware Adjustment
+
+If timeline = Hackathon:
+
+* heavily favor low complexity / build speed
+  If budget = Low:
+* penalize multi-service stacks and premium-heavy paths
+
+#### D) Scale Scenario Modifiers
+
+Use usage profile (users/traffic/data):
+
+* if traffic high and no cache/CDN → scalability penalty
+* if single region + high uptime target → reliability penalty
+
+#### E) Normalization
+
+Clamp each score 1–10
+Store both:
+
+* raw weighted values
+* normalized values
+* evidence/rules hit
+
+### Why this matters
+
+This turns your tool into a **decision engine**, not a diagramming toy.
+
+---
+
+## 10.5 Architecture Linter (Core Differentiator)
+
+### Purpose
+
+Detect design mistakes and anti-patterns.
+
+### Lint Output Types
+
+* **Error** (critical)
+* **Warning** (serious)
+* **Info** (best practice suggestion)
+
+### Example Lint Rules (MVP)
+
+#### Critical
+
+* No auth node for app that stores user-specific data
+* AI feature present but no backend/action path to LLM
+* File upload feature present but no storage target
+* Edge references missing node
+* Public webhook endpoint without verification flag
+
+#### Warnings
+
+* Long-running task in request path (suggest queue/action)
+* No cache for read-heavy architecture
+* No retries/idempotency for webhook processing
+* No rate limiting node/concept on public API
+* Single data path bottleneck
+* Vector search expected but no embeddings pipeline
+
+#### Info
+
+* Suggest feature-level decomposition
+* Suggest observability/analytics
+* Suggest cron/scheduler for periodic jobs
+
+### Lint Engine Architecture
+
+Implement as deterministic rules in Convex (query or action depending on complexity):
+
+* `runLint(graph, constraints, features): LintIssue[]`
+
+If using no external calls, this can be query-side logic.
+If augmenting with LLM explanations, wrap explanation step in an action.
+
+### Algorithm Implementation Pattern
+
+* Convert graph to typed adjacency representation
+* Build feature capability map
+* Run rule modules in sequence:
+
+  * structural rules
+  * security rules
+  * performance rules
+  * AI pipeline rules
+  * DX/scope rules
+* Deduplicate issues by code and target nodes
+
+---
+
+## 10.6 Compare Mode (Highly Recommended)
+
+### Purpose
+
+Generate and compare 2–3 architecture alternatives.
+
+### UX
+
+“Compare Alternatives” opens a view with:
+
+* Current architecture
+* Alternative A (MVP-fast)
+* Alternative B (Scale-ready)
+* Alternative C (Budget-first)
+
+### Comparison Dimensions
+
+* Score radar / score cards
+* Key differences (component-level)
+* Risks
+* Why choose this option
+* “Apply this architecture” button
+
+### Backend Flow
+
+Use Convex Action:
+
+1. Take current prompt + constraints + features
+2. Generate alternatives from strategy presets:
+
+   * `mvp_speed`
+   * `balanced`
+   * `scale_first`
+3. Run score + lint on each
+4. Return comparison pack
+
+### Algorithm
+
+Use strategy presets as deterministic knobs:
+
+* `mvp_speed`: minimize node count
+* `scale_first`: include cache/queue/worker patterns
+* `budget_first`: reduce paid providers and complexity
+* `ai_heavy`: optimize LLM + vector pathways
+
+This makes output predictable and more “engineered.”
+
+---
+
+## 10.7 Feature Planner (Your Insight — very strong)
+
+### Purpose
+
+Plan architecture **per feature**, not only whole app.
+
+### Why this is important
+
+This is one of your most unique ideas. Most tools produce a whole-system text plan. You’ll let users plan:
+
+* auth
+* billing
+* file upload
+* AI chat
+* search
+* notifications
+  …as incremental layers that map to architecture changes.
+
+### UI
+
+Left sidebar tab: **Features**
+
+* List of features
+* Add feature
+* Reorder features
+* Feature status:
+
+  * planned
+  * in progress
+  * exported
+
+Clicking a feature shows:
+
+* required capabilities
+* affected nodes
+* required new nodes/edges
+* implementation steps
+* risks
+* test checklist
+
+### Feature Object Schema
+
+* `id`
+* `name`
+* `category`
+* `description`
+* `priority`
+* `status`
+* `dependencies`
+* `acceptanceCriteria[]`
+* `architectureDiff`
+
+  * nodesToAdd
+  * edgesToAdd
+  * nodeConfigChanges
+* `buildPlan`
+
+  * tasks
+  * prompts
+  * endpoints/functions
+  * test cases
+
+### Feature Planning Algorithm
+
+For each feature:
+
+1. Parse capability requirements
+2. Compare against current graph capabilities
+3. Produce **diff**
+4. Score delta impact
+5. Create implementation steps
+6. Attach lint checks specific to that feature
+
+This makes the product genuinely practical.
+
+---
+
+## 10.8 Export / Handoff Bundle (Core)
+
+### Purpose
+
+Make the architecture usable in Cursor/Lovable/Claude Code/etc.
+
+### Export Formats (MVP)
+
+1. **Architecture JSON**
+
+   * nodes
+   * edges
+   * constraints
+   * scores
+   * lint issues
+   * features
+
+2. **Markdown PRD Summary**
+
+   * architecture rationale
+   * chosen stack
+   * trade-offs
+   * risks
+   * implementation order
+
+3. **Prompt Pack**
+
+   * prompts for building:
+
+     * project scaffold
+     * auth
+     * data schema
+     * feature-by-feature implementation
+     * deployment setup
+   * one prompt per feature/module
+
+4. **Mermaid Diagram** (optional MVP, good stretch)
+
+   * flowchart / graph TD output
+
+5. **Task Breakdown**
+
+   * “Day 1 / Day 2 / Day 3”
+   * or “Hackathon build order”
+
+### Export UX
+
+* Export modal with checkboxes:
+
+  * include compare alternatives?
+  * include lint notes?
+  * include feature plans?
+* Buttons:
+
+  * Copy to clipboard
+  * Download `.json`
+  * Download `.md`
+
+### Backend
+
+Exports can be generated server-side via Convex query/action.
+If export needs signed file URLs or storage, Convex File Storage can be used, but for MVP you can return text directly.
+
+---
+
+## 10.9 AI Assistant Panel (Right Sidebar)
+
+### Purpose
+
+Context-aware assistant about the current architecture (not generic chat).
+
+### Tabs
+
+* **Assistant**
+* **Inspector**
+* **Lint**
+* **Scores**
+* **History** (stretch)
+
+### Assistant Capabilities
+
+* Explain selected node
+* Explain trade-offs
+* Suggest improvements
+* Answer “why is this bad?”
+* Generate alternatives for selected subgraph
+* Convert selected subgraph into feature plan
+
+### Important Rule
+
+Assistant must be **graph-aware**, not just prompt-only:
+
+* send current graph JSON (compressed or summarized)
+* selected node/edge context
+* constraints
+* feature context
+
+### Implementation
+
+Use Convex Action for AI responses.
+Store chat threads in Convex if you want persistence.
+
+---
+
+# 11) Convex Backend Design (Detailed)
+
+This is where your PRD gets implementation-ready.
+
+Convex provides:
+
+* **queries** for reads/reactive UI,
+* **mutations** for writes/transactions,
+* **actions** for external API calls,
+* **HTTP actions** for webhook/public API endpoints. ([Convex Developer Hub][2])
+
+---
+
+## 11.1 Convex Data Model (`convex/schema.ts`)
+
+Use Convex schema with validation enabled (default is validation on, strict table names on). That is ideal for correctness in your app. ([Convex Developer Hub][6])
+
+### Tables
+
+### `users`
+
+Fields:
+
+* `externalId` (string) — from auth provider
+* `email` (string)
+* `name` (string)
+* `imageUrl` (optional string)
+* `createdAt`
+* `lastSeenAt`
+
+Indexes:
+
+* `by_externalId`
+* `by_email`
+
+---
+
+### `projects`
+
+Fields:
+
+* `ownerId` (id `users`)
+* `name`
+* `slug` (optional)
+* `description`
+* `ideaPrompt`
+* `constraints` (object)
+* `activeVersionId` (id `projectVersions`)
+* `createdAt`
+* `updatedAt`
+* `archived` (boolean)
+
+Indexes:
+
+* `by_ownerId`
+* `by_ownerId_updatedAt`
+
+---
+
+### `projectVersions`
+
+Purpose: snapshot/version history
+
+Fields:
+
+* `projectId`
+* `versionNumber`
+* `graph` (JSON-ish object; can be structured)
+* `features` (array/object)
+* `scores`
+* `lintIssues`
+* `generationMeta`
+
+  * source (`manual` | `ai_generate` | `compare_variant`)
+  * assumptions
+  * strategy
+* `createdByUserId`
+* `createdAt`
+
+Indexes:
+
+* `by_projectId`
+* `by_projectId_versionNumber`
+
+---
+
+### `projectNodes`
+
+(Option A: normalized graph storage; Option B: store graph blob in `projectVersions`)
+For MVP, I recommend:
+
+* canonical current graph in `projects` as object
+* version snapshots in `projectVersions`
+
+Normalized graph tables are nicer but slower to build in hackathon.
+
+---
+
+### `featurePlans`
+
+Fields:
+
+* `projectId`
+* `name`
+* `category`
+* `description`
+* `priority`
+* `status`
+* `dependencies`
+* `acceptanceCriteria`
+* `architectureDiff`
+* `buildPlan`
+* `createdAt`
+* `updatedAt`
+
+Indexes:
+
+* `by_projectId`
+* `by_projectId_priority`
+
+---
+
+### `assistantThreads` (optional)
+
+* `projectId`
+* `messages[]` or normalized messages table
+
+---
+
+### `exports` (optional)
+
+* `projectId`
+* `type`
+* `content`
+* `createdAt`
+
+---
+
+## 11.2 Convex Functions by Domain
+
+### Projects
+
+#### Queries
+
+* `projects.list`
+* `projects.getById`
+* `projects.getWorkspaceData` (project + current graph + features + latest scores/lint)
+
+#### Mutations
+
+* `projects.create`
+* `projects.updateMeta`
+* `projects.updateConstraints`
+* `projects.saveGraph`
+* `projects.createVersionSnapshot`
+* `projects.setActiveVersion`
+
+---
+
+### Features
+
+#### Queries
+
+* `features.listByProject`
+
+#### Mutations
+
+* `features.create`
+* `features.update`
+* `features.delete`
+* `features.reorder`
+* `features.applyArchitectureDiff`
+
+#### Actions
+
+* `features.generatePlanForFeature` (LLM-assisted)
+* `features.generateFeatureDiff`
+
+---
+
+### Scoring/Linting
+
+#### Queries (deterministic)
+
+* `analysis.scoreGraph`
+* `analysis.lintGraph`
+
+#### Actions (optional explanation)
+
+* `analysis.explainScores`
+* `analysis.explainLintIssue`
+
+---
+
+### AI Generation/Compare
+
+#### Actions (external AI calls)
+
+* `ai.generateArchitecture`
+* `ai.generateAlternatives`
+* `ai.chatAboutArchitecture`
+* `ai.generateExportBundle`
+
+Because these call external APIs, Convex **actions** are the correct function type. ([Convex Developer Hub][5])
+
+---
+
+### HTTP Actions (Optional but useful)
+
+Use Convex HTTP Actions for:
+
+* webhook ingestion (if demoing external triggers)
+* public export endpoint
+* future integrations
+
+Convex HTTP Actions use the Fetch `Request`/`Response` model and are exposed on the Convex deployment domain. ([Convex Developer Hub][7])
+
+---
+
+# 12) AI/ML Features and Algorithms (Detailed Pointers)
+
+This section is exactly what you asked for: “what algorithms should be done.”
+
+---
+
+## 12.1 Prompt Parsing Algorithm (NL → Structured Requirements)
+
+### Goal
+
+Convert user prompt into deterministic fields.
+
+### Output Schema (example)
+
+* `appType`
+* `features[]`
+* `usersEstimate`
+* `trafficProfile`
+* `dataTypes[]`
+* `realtimeRequired`
+* `fileUploadsRequired`
+* `aiFeatures[]`
+* `budgetLevel`
+* `timeline`
+* `securityLevel`
+* `complianceNeeds[]`
+
+### Implementation Approach
+
+**Preferred:** LLM JSON extraction with strict schema + server validation.
+
+### Validation Algorithm
+
+* Validate enum values
+* Fill defaults for missing fields
+* Reject/repair invalid JSON
+* Confidence score based on extraction completeness
+
+### Fallback Heuristics
+
+Regex/keyword maps:
+
+* “chat” → realtime + ai + messaging
+* “upload/pdf/file” → file uploads + storage
+* “notifications/email” → scheduler/webhooks
+* “10k users” → medium/high traffic
+
+---
+
+## 12.2 Capability Mapping Engine
+
+### Goal
+
+Convert features into backend architecture needs.
+
+### Example Mappings
+
+* `Auth` feature → auth provider + user table + route protection
+* `AI Chat` → LLM node + action path + message storage + optional vector retrieval
+* `File Upload` → storage + upload flow + file metadata
+* `Search` → text search index (or vector search if semantic search)
+* `Background Processing` → queue/worker or scheduled function
+
+### Implementation
+
+Deterministic rule table (`capability_rules.ts`)
+
+---
+
+## 12.3 Architecture Graph Synthesis
+
+### Goal
+
+Build a graph from capability requirements.
+
+### Strategy
+
+Use **templates + composition**, not freeform generation.
+
+#### Base Templates
+
+* Simple CRUD web app
+* Realtime app
+* AI app with RAG
+* Marketplace / multi-role app
+* Internal dashboard
+
+#### Composition
+
+If prompt requires both AI + file upload + auth:
+
+* Start from “AI app” template
+* Add file upload subgraph
+* Add auth boundary
+* Merge shared backend/storage nodes
+
+### Algorithm Outline
+
+1. Select base template
+2. Merge required feature subgraphs
+3. Resolve duplicates (same provider/node type)
+4. Add edges by capability contracts
+5. Apply constraints optimization
+6. Run lint and fix pass (optional)
+7. Return graph + assumptions
+
+---
+
+## 12.4 Scoring Engine (Deterministic)
+
+Covered earlier, but implementation structure:
+
+### Scoring Modules
+
+* `scoreBuildSpeed(graph, constraints)`
+* `scoreComplexity(graph, constraints)`
+* `scoreScalability(graph, constraints)`
+* `scoreCost(graph, constraints, scenario)`
+* `scoreReliability(graph, constraints)`
+* `scoreLockIn(graph)`
+* `scoreOpsBurden(graph)`
+
+### Output
+
+Each function returns:
+
+* numeric score
+* rule hits
+* explanation tokens (for LLM/templated text)
+
+---
+
+## 12.5 Linting Engine (Deterministic + Explainable)
+
+### Rule Definition Format
+
+Each lint rule should be data-driven:
+
+* `code`
+* `severity`
+* `title`
+* `description`
+* `predicate(graph, context)`
+* `targets`
+* `suggestedFix`
+
+This makes it easy to add rules quickly during hackathon.
+
+---
+
+## 12.6 Compare Mode Variant Generation
+
+### Strategy Presets
+
+Each preset tweaks selection weights:
+
+#### `mvp_speed`
+
+* prefer fewer services
+* prefer managed/simple components
+* avoid optional infra unless required
+
+#### `balanced`
+
+* moderate complexity
+* add some reliability best practices
+
+#### `scale_first`
+
+* add caching
+* async processing
+* separation of concerns
+* stronger observability
+
+#### `budget_first`
+
+* minimize paid premium services
+* fewer external dependencies
+
+---
+
+## 12.7 Export Prompt Pack Generation
+
+### Goal
+
+Generate high-quality implementation prompts for AI coding tools.
+
+### Algorithm
+
+1. Use selected architecture graph
+2. Convert to implementation sequence
+3. For each feature/module:
+
+   * infer files/components/functions required
+   * infer schema changes
+   * infer API endpoints
+   * infer testing requirements
+4. Emit prompts in deterministic template format
+
+### Prompt Pack Sections
+
+* Project scaffolding prompt
+* Auth setup prompt
+* Convex schema prompt
+* Convex functions prompt
+* Next.js pages/components prompt
+* Feature prompts
+* Deployment prompt (Vercel + Convex)
+
+---
+
+# 13) Next.js Implementation Plan (App Router + Vercel)
+
+Next.js App Router is the right foundation here because it supports modern server/client patterns and route handlers cleanly. ([Next.js][1])
+
+---
+
+## 13.1 App Structure (Recommended)
+
+Use App Router route groups:
+
+* `app/(marketing)/page.tsx`
+* `app/(auth)/sign-in/page.tsx`
+* `app/(app)/dashboard/page.tsx`
+* `app/(app)/project/[projectId]/page.tsx`
+* `app/api/...` only if needed (but prefer Convex backend for app logic)
+* shared components under `components/`
+* canvas domain under `components/workspace/`
+
+### Server vs Client Component Strategy
+
+* **Server Components** for layout/shell/data hydration where possible
+* **Client Components** for:
+
+  * canvas interactions
+  * drag/drop
+  * right-side chat
+  * local UI state
+
+### Why
+
+The canvas is highly interactive and should live in client components.
+Next.js App Router still gives you a strong shell and route organization.
+
+---
+
+## 13.2 Route Handlers (Use Carefully)
+
+Next.js Route Handlers are available in `app` and support standard HTTP methods. They are not cached by default, and GETs can opt into static behavior. ([Next.js][8])
+
+### Recommendation
+
+For MVP:
+
+* Use **Convex** for primary app APIs
+* Use Next.js Route Handlers only for:
+
+  * health checks
+  * small frontend-only utilities
+  * maybe webhooks if not using Convex HTTP Actions
+
+This keeps backend logic centralized.
+
+---
+
+## 13.3 Next.js Caching / Rendering Guidance
+
+### Keep MVP simple
+
+Avoid over-engineering Next cache behavior in hackathon.
+
+### Suggested approach
+
+* Project workspace page: dynamic / client-heavy
+* Marketing page: static
+* Dashboard: server shell + client data hooks
+
+Next.js now has Cache Components and `use cache` patterns, but you do not need to implement advanced caching for MVP unless you have time. Still, it’s good to know the direction if you optimize later. ([Next.js][9])
+
+---
+
+## 13.4 Environment Variables (Next.js + Vercel)
+
+Use Vercel project environment variables (not only local `.env`) for deployment. Vercel documents env management and limits, and Next docs also recommend configuring env vars in Project Settings for deployed apps. ([Vercel][10])
+
+### Expected Vars
+
+Frontend:
+
+* `NEXT_PUBLIC_CONVEX_URL`
+* `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (if Clerk)
+* `NEXT_PUBLIC_APP_URL`
+
+Server (if needed in Next runtime):
+
+* `CLERK_SECRET_KEY`
+* `LLM_API_KEY` (if calling LLM directly from Next route handlers; otherwise keep in Convex action env)
+* `CONVEX_DEPLOYMENT` (tooling dependent)
+
+### Caution
+
+If using Edge runtime for anything, environment behavior and supported APIs differ. Edge is more restricted than Node runtime. For MVP, prefer Node/serverless defaults and avoid Edge-specific complexity unless necessary. ([Vercel][11])
+
+---
+
+# 14) Convex-Specific Implementation Guidance (Important)
+
+---
+
+## 14.1 Convex + Next.js App Router Integration
+
+Convex has an App Router-specific Next.js page and quickstart, and Convex React is the main client integration for queries/mutations/actions. ([Convex Developer Hub][12])
+
+### Integration Pattern
+
+* Create Convex client provider component (`'use client'`)
+* Wrap app layout (or app section layout)
+* Use Convex React hooks in client components
+* Keep workspace data reactive
+
+---
+
+## 14.2 Auth Recommendation
+
+### For hackathon speed and reliability
+
+Use **Clerk + Convex** integration.
+
+Convex has a dedicated provider for Clerk and explicit Next.js integration guidance. ([Convex Developer Hub][13])
+
+### Why not Convex Auth (for this project)
+
+Convex Auth is compelling, but docs currently indicate beta status and note Next.js server component/API/middleware support is still under active development. For a hackathon, reduce risk. ([Convex Developer Hub][4])
+
+---
+
+## 14.3 Convex Functions Usage Map
+
+### Queries
+
+Use for:
+
+* loading projects
+* loading graph state
+* scoring (if deterministic and cheap)
+* linting (if deterministic and cheap)
+
+Queries are reactive/cached/subscribable, which is perfect for a planning UI. ([Convex Developer Hub][2])
+
+### Mutations
+
+Use for:
+
+* saving graph edits
+* updating constraints
+* creating projects/features
+* storing export bundles
+* creating snapshots
+
+Mutations are transactional, which is ideal for graph updates and version snapshots. ([Convex Developer Hub][14])
+
+### Actions
+
+Use for:
+
+* LLM calls
+* embeddings (if added)
+* architecture generation
+* compare mode generation
+* export summarization
+
+Actions are built for external API calls and can call queries/mutations indirectly. ([Convex Developer Hub][5])
+
+---
+
+## 14.4 File Storage (Optional but useful)
+
+Convex File Storage can support:
+
+* export files
+* uploaded architecture assets/screenshots
+* imported docs (future)
+
+Convex supports upload URLs and direct file storage workflows; if you demo file-backed exports later, use the generated upload URL flow. ([Convex Developer Hub][15])
+
+---
+
+## 14.5 Search (Future / Stretch)
+
+If you add searchable architecture templates, Convex full-text search is a nice future feature. Convex also supports vector search, but note vector search is used from actions and requires a vector index. ([Convex Developer Hub][16])
+
+---
+
+## 14.6 Scheduling (Stretch)
+
+If you add:
+
+* nightly cost recalculations
+* health checks on architecture templates
+* periodic cleanup
+
+Convex cron jobs/scheduling can handle it. Cron jobs are defined in `convex/crons.ts`. ([Convex Developer Hub][17])
+
+---
+
+# 15) Detailed UX Specs for Workspace Panels
+
+---
+
+## 15.1 Left Sidebar
+
+### Tabs
+
+1. **Components**
+2. **Features**
+3. **Templates**
+4. **Layers** (optional)
+
+### Components Tab
+
+* Search input
+* Category groups
+* Draggable items
+* Hover tooltip:
+
+  * what it does
+  * pros/cons
+  * complexity badge
+
+### Features Tab
+
+* Add feature button
+* Feature cards with status + priority
+* Clicking feature highlights affected nodes on canvas
+
+### Templates Tab
+
+* “AI Chat App”
+* “SaaS Dashboard”
+* “Marketplace”
+* “Internal Tool”
+* “RAG App”
+* “Realtime Collaboration”
+
+---
+
+## 15.2 Center Canvas
+
+### Interactions
+
+* Drag/drop nodes
+* Connect edges by handles
+* Multi-select
+* Keyboard shortcuts:
+
+  * delete
+  * duplicate
+  * copy/paste
+  * pan
+  * fit view
+
+### Visual Design
+
+* Dark grid background (like your inspiration)
+* Node badges (provider + type)
+* Lint icons on nodes
+* Edge labels for relationship type
+* Optional mini-map
+
+### Helpful UX
+
+* “Quick add” plus button on node
+* Auto-suggest edge when a node is dropped near another
+* Snap to grid (toggle)
+
+---
+
+## 15.3 Right Panel
+
+### Tab 1: Inspector
+
+Shows selected node/edge:
+
+* label
+* type
+* provider
+* config fields
+* notes
+* cost hint
+* complexity hint
+
+#### Dynamic forms by node type
+
+Example: `LLM Node`
+
+* model family
+* sync/async usage
+* estimated request volume
+* fallback model toggle
+
+Example: `Auth Node`
+
+* provider
+* RBAC needed?
+* social login?
+* admin roles?
+
+---
+
+### Tab 2: Scores
+
+* Score cards for each dimension
+* Mini explanation
+* “Why?” expands evidence/rules
+
+---
+
+### Tab 3: Lint
+
+* Group by severity
+* Click issue → focus node/subgraph
+* “Apply suggested fix” (stretch)
+
+---
+
+### Tab 4: Assistant
+
+* Context-aware chat
+* Action buttons:
+
+  * “Explain this architecture”
+  * “Make this cheaper”
+  * “Make this more scalable”
+  * “Generate alternatives”
+  * “Plan this feature”
+
+---
+
+# 16) Export Bundle Spec (Detailed)
+
+---
+
+## 16.1 JSON Export Schema
+
+Top-level:
+
+* `project`
+* `constraints`
+* `graph`
+* `features`
+* `scores`
+* `lintIssues`
+* `recommendedBuildOrder`
+* `generatedAt`
+* `version`
+
+This should be deterministic and reusable for future integrations.
+
+---
+
+## 16.2 Markdown Export Sections
+
+1. Project Summary
+2. Chosen Architecture
+3. Component-by-Component Rationale
+4. Risks & Lint Warnings
+5. Alternative Options (if generated)
+6. Feature Build Order
+7. Convex Backend Plan
+8. Next.js Frontend Plan
+9. Deployment Plan (Vercel + Convex)
+10. Testing Checklist
+
+---
+
+## 16.3 Prompt Pack Export (Most important)
+
+Generate prompts like:
+
+* **Prompt 1:** scaffold Next.js app + Convex provider + auth shell
+* **Prompt 2:** define Convex schema and functions for project domain
+* **Prompt 3:** build workspace canvas UI
+* **Prompt 4:** implement scoring engine
+* **Prompt 5:** implement linter
+* **Prompt 6:** implement compare mode
+* **Prompt 7:** export UI and file generation
+
+For each prompt include:
+
+* goal
+* files to create/update
+* expected outputs
+* acceptance checks
+
+This is what makes your product an actual “handoff layer.”
+
+---
+
+# 17) Security / Reliability Requirements (MVP-level)
+
+## Must-have
+
+* Validate all public Convex function args with validators (important for production correctness/security; Convex explicitly recommends validation for public functions). ([Convex Developer Hub][18])
+* Do not trust client graph payloads blindly
+* Enforce ownership checks on project queries/mutations
+* Rate limit AI generation endpoint if possible (basic)
+
+## Nice-to-have
+
+* Webhook signature verification (if using HTTP actions)
+* Idempotency keys for export/create-version actions
+
+---
+
+# 18) Performance Requirements
+
+## MVP Targets
+
+* Canvas interactions feel instant (<100ms local state updates)
+* Save debounce: ~1–2s
+* AI generation under ~10–20s (with loading states)
+* Lint/score deterministic pass under 500ms for small-medium graphs
+
+## Strategy
+
+* Keep canvas state local (client store)
+* Persist in background
+* Use Convex reactive queries for cross-page freshness
+* Run heavy AI steps in actions
+
+---
+
+# 19) Analytics / Observability (MVP simple)
+
+Track events:
+
+* project_created
+* architecture_generated
+* alternative_generated
+* lint_run
+* export_generated
+* feature_planned
+
+This helps your demo (“we can show user behavior insights”) and is useful later.
+
+---
+
+# 20) Build Phases (48-hour Hackathon Plan)
+
+You didn’t ask this explicitly in this message, but it’s useful for implementation.
+
+## Phase 1 — Foundation (Must)
+
+* Next.js app shell
+* Convex setup
+* Auth (or temp local-only)
+* Dashboard + project creation
+* Workspace layout
+* Canvas with drag/drop nodes
+* Save/load graph from Convex
+
+## Phase 2 — Intelligence (Must)
+
+* Constraints panel
+* Deterministic scoring engine
+* Deterministic linter
+* Score/lint UI
+
+## Phase 3 — AI Layer (Must)
+
+* Prompt → architecture generation action
+* Apply generated graph to canvas
+* Assistant panel basic “explain”
+* Export markdown/json
+
+## Phase 4 — Differentiator (Strongly recommended)
+
+* Compare alternatives
+* Feature planner (at least one feature flow)
+* Prompt pack export
+
+## Phase 5 — Polish (Stretch)
+
+* Version snapshots
+* Mermaid export
+* Share link
+* Better animations/UI polish
+
+---
+
+# 21) Risks and Mitigations
+
+## Risk 1: “Looks like a diagram tool”
+
+### Mitigation
+
+Prioritize:
+
+* scoring
+* linter
+* compare
+* export prompt pack
+
+## Risk 2: AI outputs inconsistent graphs
+
+### Mitigation
+
+Use:
+
+* structured JSON generation
+* server-side graph canonicalization
+* deterministic validation
+
+## Risk 3: Hackathon scope creep
+
+### Mitigation
+
+Skip:
+
+* exact pricing APIs
+* full auth complexity
+* collaboration
+* provider-specific deep configs
+
+## Risk 4: Convex auth integration complexity
+
+### Mitigation
+
+Use Clerk + Convex (well-supported path) instead of Convex Auth beta path for Next.js hackathon MVP. ([Convex Developer Hub][13])
+
+---
+
+# 22) Acceptance Criteria (Feature-by-Feature)
+
+## A. Project Workspace
+
+* User can create a project and open workspace
+* Canvas persists after refresh
+* Constraints persist
+
+## B. AI Generation
+
+* User enters prompt + constraints
+* Graph appears with >= 5 nodes for non-trivial app
+* Generation includes rationale text
+
+## C. Scoring
+
+* Current graph displays scores across at least 5 dimensions
+* Scores update after graph change or constraint change
+
+## D. Lint
+
+* Linter surfaces meaningful issues
+* Clicking lint issue highlights target node/edge
+
+## E. Compare
+
+* User can generate 2+ alternatives
+* Alternatives show score differences
+* User can apply one alternative to current graph
+
+## F. Feature Planner
+
+* User can add feature
+* Tool suggests architecture diff
+* Tool generates implementation steps for that feature
+
+## G. Export
+
+* User can export markdown + JSON
+* Export includes build order and prompt pack
+
+---
+
+# 23) Future Roadmap (Post-Hackathon)
+
+* Direct integrations with Cursor/Lovable via plugin/API
+* Team collaboration (comments, review mode)
+* Cloud cost engine with real provider pricing
+* Architecture templates marketplace
+* Codebase import → reverse-engineer architecture
+* “Architecture drift” checker after implementation
+
+---
+
+# 24) Final Recommendation on Your Product Direction
+
+This PRD assumes the **strong version** of your idea — and that’s the version you should build.
+
+If you follow this, your project becomes:
+
+* not redundant,
+* not just a pretty UI,
+* and not just another AI chatbot.
+
+It becomes a **developer decision platform**.
+
+---
+
+If you want, I can also generate the next layer for you:
+
+1. a **full database schema draft** (`convex/schema.ts` structure),
+2. the **exact Convex function list** (query/mutation/action names and signatures), and
+3. a **UI component tree** for the Next.js app (page by page, component by component).
+
+[1]: https://nextjs.org/docs/app?utm_source=chatgpt.com "Next.js Docs: App Router | Next.js"
+[2]: https://docs.convex.dev/functions?utm_source=chatgpt.com "Functions | Convex Developer Hub"
+[3]: https://vercel.com/docs/frameworks/full-stack/nextjs?utm_source=chatgpt.com "Next.js on Vercel"
+[4]: https://docs.convex.dev/auth/convex-auth?utm_source=chatgpt.com "Convex Auth | Convex Developer Hub"
+[5]: https://docs.convex.dev/functions/actions?utm_source=chatgpt.com "Actions | Convex Developer Hub"
+[6]: https://docs.convex.dev/database/schemas?utm_source=chatgpt.com "Schemas | Convex Developer Hub"
+[7]: https://docs.convex.dev/functions/http-actions?utm_source=chatgpt.com "HTTP Actions | Convex Developer Hub"
+[8]: https://nextjs.org/docs/app/getting-started/route-handlers-and-middleware?utm_source=chatgpt.com "Getting Started: Route Handlers | Next.js"
+[9]: https://nextjs.org/docs/app/getting-started/cache-components?utm_source=chatgpt.com "Getting Started: Cache Components | Next.js"
+[10]: https://vercel.com/docs/projects/environment-variables?utm_source=chatgpt.com "Environment variables"
+[11]: https://vercel.com/docs/functions/runtimes/edge?utm_source=chatgpt.com "Edge Runtime"
+[12]: https://docs.convex.dev/client/nextjs/app-router/?utm_source=chatgpt.com "Next.js | Convex Developer Hub"
+[13]: https://docs.convex.dev/auth/clerk?utm_source=chatgpt.com "Convex & Clerk | Convex Developer Hub"
+[14]: https://docs.convex.dev/functions/mutation-functions?utm_source=chatgpt.com "Mutations | Convex Developer Hub"
+[15]: https://docs.convex.dev/file-storage?utm_source=chatgpt.com "File Storage | Convex Developer Hub"
+[16]: https://docs.convex.dev/search/text-search?utm_source=chatgpt.com "Full Text Search | Convex Developer Hub"
+[17]: https://docs.convex.dev/scheduling/cron-jobs?utm_source=chatgpt.com "Cron Jobs | Convex Developer Hub"
+[18]: https://docs.convex.dev/functions/validation?utm_source=chatgpt.com "Argument and Return Value Validation | Convex Developer Hub"
