@@ -18,6 +18,17 @@ export default defineSchema({
     name: v.string(),
     description: v.optional(v.string()),
     ideaPrompt: v.optional(v.string()),
+    phase: v.optional(v.string()), // "chat" | "architecture"
+    chatHistory: v.optional(v.array(v.object({
+      role: v.string(),
+      content: v.string(),
+      createdAt: v.number(),
+    }))),
+    extractedContext: v.optional(v.object({
+      appIdea: v.optional(v.string()),
+      features: v.optional(v.array(v.string())),
+      constraints: v.optional(v.any()),
+    })),
     constraints: v.optional(
       v.object({
         budgetLevel: v.optional(v.string()),

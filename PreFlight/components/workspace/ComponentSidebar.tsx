@@ -7,16 +7,16 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     COMPONENT_CATALOG,
+    CATEGORY_ORDER,
     CATEGORY_LABELS,
     CATEGORY_COLORS,
-    type ComponentCategory,
     type ComponentDef,
 } from "@/lib/component-catalog";
 import { useWorkspaceStore } from "@/lib/store";
 import {
     Globe, Monitor, Smartphone, Server, Network, Cog, ExternalLink,
     Database, Zap, Layers, Shield, Lock, HardDrive, Brain, ShieldCheck,
-    List, Clock, BarChart3, Activity, Search, Plus,
+    List, Clock, BarChart3, Activity, Search,
 } from "lucide-react";
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -24,10 +24,6 @@ const ICON_MAP: Record<string, React.ElementType> = {
     Database, Zap, Layers, Shield, Lock, HardDrive, Brain, ShieldCheck,
     List, Clock, BarChart3, Activity,
 };
-
-const categories: ComponentCategory[] = [
-    "frontend", "backend", "data", "auth", "storage", "ai", "infra",
-];
 
 function ComponentItem({ component }: { component: ComponentDef }) {
     const IconComponent = ICON_MAP[component.icon] ?? Server;
@@ -75,15 +71,17 @@ export function ComponentSidebar({ projectId }: { projectId: string }) {
         (c) =>
             c.label.toLowerCase().includes(search.toLowerCase()) ||
             c.provider.toLowerCase().includes(search.toLowerCase()) ||
-            c.tags.some((t) => t.toLowerCase().includes(search.toLowerCase()))
+            c.tags.some((t) => t.toLowerCase().includes(search.toLowerCase())) ||
+            c.capabilities.some((cap) => cap.toLowerCase().includes(search.toLowerCase())) ||
+            c.subcategory?.toLowerCase().includes(search.toLowerCase())
     );
 
     return (
-        <div className="w-[260px] border-r border-border bg-card/50 flex flex-col h-full">
+        <div className="w-[260px] border-r border-border bg-card/50 flex flex-col h-full min-h-0">
             <Tabs
                 value={leftSidebarTab}
                 onValueChange={(v) => setLeftSidebarTab(v as "components" | "features")}
-                className="flex flex-col h-full"
+                className="flex flex-col h-full min-h-0"
             >
                 <div className="px-3 pt-3 pb-2 border-b border-border">
                     <TabsList className="w-full grid grid-cols-2 h-8">
@@ -92,7 +90,7 @@ export function ComponentSidebar({ projectId }: { projectId: string }) {
                     </TabsList>
                 </div>
 
-                <TabsContent value="components" className="flex-1 flex flex-col mt-0 overflow-hidden">
+                <TabsContent value="components" className="flex-1 min-h-0 flex flex-col mt-0 overflow-hidden">
                     <div className="px-3 py-2">
                         <div className="relative">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -104,11 +102,19 @@ export function ComponentSidebar({ projectId }: { projectId: string }) {
                             />
                         </div>
                     </div>
-                    <ScrollArea className="flex-1">
+                    <ScrollArea className="flex-1 min-h-0">
                         <div className="px-3 pb-3 space-y-4">
-                            {categories.map((cat) => {
+                            {CATEGORY_ORDER.map((cat) => {
                                 const items = filteredComponents.filter((c) => c.category === cat);
                                 if (items.length === 0) return null;
+
+                                const grouped = items.reduce<Record<string, ComponentDef[]>>((acc, component) => {
+                                    const key = component.subcategory ?? "General";
+                                    if (!acc[key]) acc[key] = [];
+                                    acc[key].push(component);
+                                    return acc;
+                                }, {});
+
                                 return (
                                     <div key={cat}>
                                         <p
@@ -117,9 +123,18 @@ export function ComponentSidebar({ projectId }: { projectId: string }) {
                                         >
                                             {CATEGORY_LABELS[cat]}
                                         </p>
-                                        <div className="space-y-0.5">
-                                            {items.map((component) => (
-                                                <ComponentItem key={component.type} component={component} />
+                                        <div className="space-y-2">
+                                            {Object.entries(grouped).map(([group, groupItems]) => (
+                                                <div key={group}>
+                                                    <p className="text-[10px] text-muted-foreground px-1 mb-1">
+                                                        {group}
+                                                    </p>
+                                                    <div className="space-y-0.5">
+                                                        {groupItems.map((component) => (
+                                                            <ComponentItem key={component.type} component={component} />
+                                                        ))}
+                                                    </div>
+                                                </div>
                                             ))}
                                         </div>
                                     </div>
@@ -129,7 +144,7 @@ export function ComponentSidebar({ projectId }: { projectId: string }) {
                     </ScrollArea>
                 </TabsContent>
 
-                <TabsContent value="features" className="flex-1 mt-0 overflow-hidden">
+                <TabsContent value="features" className="flex-1 min-h-0 mt-0 overflow-hidden">
                     <FeaturesList projectId={projectId} />
                 </TabsContent>
             </Tabs>

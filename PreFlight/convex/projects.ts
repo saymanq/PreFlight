@@ -47,7 +47,6 @@ export const create = mutation({
     args: {
         name: v.string(),
         description: v.optional(v.string()),
-        ideaPrompt: v.optional(v.string()),
     },
     handler: async (ctx, args) => {
         const identity = await ctx.auth.getUserIdentity();
@@ -64,23 +63,15 @@ export const create = mutation({
             ownerId: user._id,
             name: args.name,
             description: args.description,
-            ideaPrompt: args.ideaPrompt,
-            constraints: {
-                budgetLevel: "medium",
-                teamSize: "1",
-                timeline: "hackathon",
-                trafficExpectation: "low",
-                dataSensitivity: "low",
-                regionCount: "1",
-                uptimeTarget: "99",
-                devExperiencePreference: "fastest_mvp",
-            },
+            phase: "chat",
+            chatHistory: [],
             graph: { nodes: [], edges: [] },
             createdAt: Date.now(),
             updatedAt: Date.now(),
         });
     },
 });
+
 
 export const updateMeta = mutation({
     args: {
@@ -192,5 +183,52 @@ export const remove = mutation({
     args: { projectId: v.id("projects") },
     handler: async (ctx, args) => {
         await ctx.db.patch(args.projectId, { archived: true, updatedAt: Date.now() });
+    },
+});
+
+export const saveChatHistory = mutation({
+    args: {
+        projectId: v.id("projects"),
+        messages: v.array(v.object({
+            role: v.string(),
+            content: v.string(),
+            createdAt: v.number(),
+        })),
+    },
+    handler: async (ctx, args) => {
+        await ctx.db.patch(args.projectId, {
+            chatHistory: args.messages,
+            updatedAt: Date.now(),
+        });
+    },
+});
+
+export const transitionToArchitecture = mutation({
+    args: {
+        projectId: v.id("projects"),
+        extractedContext: v.object({
+            appIdea: v.optional(v.string()),
+            features: v.optional(v.array(v.string())),
+            constraints: v.optional(v.any()),
+        }),
+    },
+    handler: async (ctx, args) => {
+        const constraints = args.extractedContext.constraints ?? {};
+        await ctx.db.patch(args.projectId, {
+            phase: "architecture",
+            extractedContext: args.extractedContext,
+            ideaPrompt: args.extractedContext.appIdea,
+            constraints: {
+                budgetLevel: constraints.budgetLevel ?? "medium",
+                teamSize: constraints.teamSize ?? "1",
+                timeline: constraints.timeline ?? "hackathon",
+                trafficExpectation: constraints.trafficExpectation ?? "low",
+                dataSensitivity: constraints.dataSensitivity ?? "low",
+                regionCount: constraints.regionCount ?? "1",
+                uptimeTarget: constraints.uptimeTarget ?? "99",
+                devExperiencePreference: constraints.devExperiencePreference ?? "fastest_mvp",
+            },
+            updatedAt: Date.now(),
+        });
     },
 });

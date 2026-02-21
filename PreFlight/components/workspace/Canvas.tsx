@@ -9,7 +9,6 @@ import {
     BackgroundVariant,
     type NodeTypes,
     type EdgeTypes,
-    type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useWorkspaceStore, type ArchNode } from "@/lib/store";
@@ -19,6 +18,8 @@ import { getComponentByType } from "@/lib/component-catalog";
 
 const nodeTypes: NodeTypes = {
     custom: CustomNode,
+    // Backward compatibility for older saved graphs
+    archNode: CustomNode,
 };
 
 const edgeTypes: EdgeTypes = {

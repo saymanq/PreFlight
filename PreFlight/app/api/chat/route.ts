@@ -23,7 +23,7 @@ ${(context.edges ?? []).map((e: { source: string; target: string; type: string }
         }
 
         const result = streamText({
-            model: google("gemini-3-flash-preview"),
+            model: google("gemini-3.1-pro-preview"),
             system: systemPrompt,
             messages: messages.map((m: { role: string; content: string }) => ({
                 role: m.role as "user" | "assistant",

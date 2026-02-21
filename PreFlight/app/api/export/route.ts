@@ -31,7 +31,7 @@ export async function POST(req: Request) {
             : "No scores available";
 
         const result = await generateText({
-            model: google("gemini-3-flash-preview"),
+            model: google("gemini-3.1-pro-preview"),
             prompt: `You are an expert software architect. Generate a comprehensive implementation prompt pack for the following architecture.
 
 PROJECT: ${projectName}

@@ -109,7 +109,12 @@ const LINT_RULES: LintRule[] = [
             const dataEdges = edges.filter(
                 (e) => dataNodes.some((d) => d.id === e.target || d.id === e.source)
             );
-            const hasCache = nodes.some((n) => n.data.type === "redis");
+            const hasCache = nodes.some(
+                (n) =>
+                    n.data.type === "redis" ||
+                    n.data.type === "upstash_redis" ||
+                    n.data.tags?.includes("cache_layer")
+            );
             return dataEdges.length > 2 && !hasCache;
         },
         targets: (nodes) => nodes.filter((n) => n.data.category === "data").map((n) => n.id),
@@ -121,11 +126,16 @@ const LINT_RULES: LintRule[] = [
         title: "LLM in request path without queue",
         description: "LLM calls are potentially synchronous without async processing.",
         predicate: (nodes) => {
-            const hasLLM = nodes.some((n) => n.data.type === "llm_provider");
-            const hasQueue = nodes.some((n) => n.data.type === "queue");
+            const hasLLM = nodes.some((n) => n.data.tags?.includes("llm"));
+            const hasQueue = nodes.some(
+                (n) =>
+                    n.data.type === "queue" ||
+                    n.data.type === "event_bus" ||
+                    n.data.type === "workflow_orchestrator"
+            );
             return hasLLM && !hasQueue;
         },
-        targets: (nodes) => nodes.filter((n) => n.data.type === "llm_provider").map((n) => n.id),
+        targets: (nodes) => nodes.filter((n) => n.data.tags?.includes("llm")).map((n) => n.id),
         suggestedFix: "Consider adding a queue for async LLM processing",
     },
     {
@@ -134,13 +144,11 @@ const LINT_RULES: LintRule[] = [
         title: "No rate limiting",
         description: "Public API without rate limiting could be abused.",
         predicate: (nodes) => {
-            const hasPublicAPI = nodes.some(
-                (n) => n.data.type === "api_gateway" || n.data.type === "external_api"
-            );
-            return hasPublicAPI;
+            const hasPublicAPI = nodes.some((n) => n.data.tags?.includes("public_api"));
+            const hasRateLimiter = nodes.some((n) => n.data.type === "rate_limiter");
+            return hasPublicAPI && !hasRateLimiter;
         },
-        targets: (nodes) =>
-            nodes.filter((n) => n.data.type === "api_gateway" || n.data.type === "external_api").map((n) => n.id),
+        targets: (nodes) => nodes.filter((n) => n.data.tags?.includes("public_api")).map((n) => n.id),
         suggestedFix: "Add rate limiting to your API gateway",
     },
     {
@@ -195,7 +203,13 @@ const LINT_RULES: LintRule[] = [
         description: "No monitoring or analytics node detected.",
         predicate: (nodes) => {
             const hasObservability = nodes.some(
-                (n) => n.data.type === "monitoring" || n.data.type === "analytics"
+                (n) =>
+                    n.data.category === "observability" ||
+                    n.data.type === "monitoring" ||
+                    n.data.type === "analytics" ||
+                    n.data.type === "error_tracking" ||
+                    n.data.type === "logging_stack" ||
+                    n.data.type === "tracing"
             );
             return nodes.length > 3 && !hasObservability;
         },
@@ -208,7 +222,9 @@ const LINT_RULES: LintRule[] = [
         title: "Consider scheduled jobs",
         description: "No cron/scheduler detected. Periodic tasks may be needed.",
         predicate: (nodes) => {
-            const hasScheduler = nodes.some((n) => n.data.type === "scheduler");
+            const hasScheduler = nodes.some(
+                (n) => n.data.type === "scheduler" || n.data.type === "workflow_orchestrator"
+            );
             return nodes.length > 5 && !hasScheduler;
         },
         targets: () => [],

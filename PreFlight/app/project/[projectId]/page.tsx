@@ -14,10 +14,12 @@ import { ConstraintsBar } from "@/components/workspace/ConstraintsBar";
 import { GenerateModal } from "@/components/workspace/GenerateModal";
 import { ExportModal } from "@/components/workspace/ExportModal";
 import { CompareModal } from "@/components/workspace/CompareModal";
+import { IdeaChat } from "@/components/project/IdeaChat";
 import { useWorkspaceStore, type ArchNode, type ArchEdge } from "@/lib/store";
 import { runScoring } from "@/lib/scoring-engine";
 import { runLint } from "@/lib/lint-engine";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function ProjectWorkspacePage() {
     const params = useParams();
@@ -30,6 +32,7 @@ export default function ProjectWorkspacePage() {
     const saveGraph = useMutation(api.projects.saveGraph);
     const updateConstraints = useMutation(api.projects.updateConstraints);
     const saveScoresAndLint = useMutation(api.projects.saveScoresAndLint);
+    const transitionToArchitecture = useMutation(api.projects.transitionToArchitecture);
 
     const {
         nodes,
@@ -44,6 +47,7 @@ export default function ProjectWorkspacePage() {
     const [showGenerate, setShowGenerate] = useState(false);
     const [showExport, setShowExport] = useState(false);
     const [showCompare, setShowCompare] = useState(false);
+    const [isAutoGenerating, setIsAutoGenerating] = useState(false);
     const [scores, setScores] = useState<Record<string, { score: number; explanation: string }> | null>(null);
     const [lintIssues, setLintIssues] = useState<Array<{
         code: string;
@@ -56,36 +60,44 @@ export default function ProjectWorkspacePage() {
 
     const initializedRef = useRef(false);
     const saveTimeoutRef = useRef<NodeJS.Timeout>(undefined);
+    const autoGenTriggeredRef = useRef(false);
 
-    // Initialize canvas from project data
+    // Determine current phase
+    const phase = project?.phase ?? "architecture"; // default to architecture for legacy projects
+
+    // Initialize canvas from project data (architecture phase only)
     useEffect(() => {
-        if (project && !initializedRef.current) {
+        if (project && phase === "architecture" && !initializedRef.current) {
             const projectGraph = project.graph as { nodes: ArchNode[]; edges: ArchEdge[] } | undefined;
-            if (projectGraph) {
-                setNodes(projectGraph.nodes ?? []);
-                setEdges(projectGraph.edges ?? []);
-            }
-            if (project.scores) {
-                setScores(project.scores as Record<string, { score: number; explanation: string }>);
-            }
-            if (project.lintIssues) {
-                setLintIssues(project.lintIssues as Array<{
-                    code: string;
-                    severity: string;
-                    title: string;
-                    description: string;
-                    targets: string[];
-                    suggestedFix: string;
-                }>);
-            }
-            initializedRef.current = true;
-            setIsDirty(false);
-        }
-    }, [project, setNodes, setEdges, setIsDirty]);
+            const hasExistingNodes = (projectGraph?.nodes?.length ?? 0) > 0;
 
-    // Debounced save
+            // Only initialize canvas if there are actual nodes.
+            // If empty, auto-generate effect will handle populating.
+            if (hasExistingNodes) {
+                setNodes(projectGraph!.nodes ?? []);
+                setEdges(projectGraph!.edges ?? []);
+                if (project.scores) {
+                    setScores(project.scores as Record<string, { score: number; explanation: string }>);
+                }
+                if (project.lintIssues) {
+                    setLintIssues(project.lintIssues as Array<{
+                        code: string;
+                        severity: string;
+                        title: string;
+                        description: string;
+                        targets: string[];
+                        suggestedFix: string;
+                    }>);
+                }
+                initializedRef.current = true;
+                setIsDirty(false);
+            }
+        }
+    }, [project, phase, setNodes, setEdges, setIsDirty]);
+
+    // Debounced save (architecture phase)
     useEffect(() => {
-        if (!isDirty || !initializedRef.current) return;
+        if (!isDirty || !initializedRef.current || phase !== "architecture") return;
 
         if (saveTimeoutRef.current) {
             clearTimeout(saveTimeoutRef.current);
@@ -111,7 +123,84 @@ export default function ProjectWorkspacePage() {
                 clearTimeout(saveTimeoutRef.current);
             }
         };
-    }, [isDirty, nodes, edges, projectId, saveGraph, setIsDirty, setIsSaving]);
+    }, [isDirty, nodes, edges, projectId, phase, saveGraph, setIsDirty, setIsSaving]);
+
+    // Auto-generate architecture after transition
+    const autoGenerate = useCallback(async (ideaPrompt: string, constraints: Record<string, string>) => {
+        if (autoGenTriggeredRef.current) return;
+        autoGenTriggeredRef.current = true;
+        setIsAutoGenerating(true);
+
+        try {
+            const response = await fetch("/api/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ prompt: ideaPrompt, constraints }),
+            });
+
+            if (!response.ok) throw new Error("Generation failed");
+
+            const result = await response.json();
+            const newNodes = result.nodes ?? [];
+            setNodes(newNodes);
+            setEdges(result.edges ?? []);
+            setIsDirty(true);
+            initializedRef.current = true;
+
+            // Save immediately
+            await saveGraph({
+                projectId: projectId as Id<"projects">,
+                graph: { nodes: newNodes, edges: result.edges ?? [] },
+            });
+        } catch (err) {
+            console.error("Auto-generate failed:", err);
+            // Allow retry after failure instead of permanently blocking auto-generate.
+            autoGenTriggeredRef.current = false;
+        } finally {
+            setIsAutoGenerating(false);
+        }
+    }, [projectId, saveGraph, setNodes, setEdges, setIsDirty]);
+
+    // Watch for newly transitioned projects that need auto-generation
+    useEffect(() => {
+        if (
+            project &&
+            phase === "architecture" &&
+            !autoGenTriggeredRef.current
+        ) {
+            const graph = project.graph as { nodes: ArchNode[]; edges: ArchEdge[] } | undefined;
+            const hasNodes = (graph?.nodes?.length ?? 0) > 0;
+
+            // If we just transitioned and there are no nodes yet, auto-generate
+            if (!hasNodes && project.ideaPrompt) {
+                autoGenerate(
+                    project.ideaPrompt,
+                    (project.constraints as Record<string, string>) ?? {}
+                );
+            }
+        }
+    }, [project, phase, autoGenerate]);
+
+    // Handle transition from chat to architecture
+    const handleTransitionToArchitecture = useCallback(
+        async (extractedContext: {
+            appIdea?: string;
+            features?: string[];
+            constraints?: Record<string, string>;
+        }) => {
+            try {
+                await transitionToArchitecture({
+                    projectId: projectId as Id<"projects">,
+                    extractedContext,
+                });
+                // Project will reactively update, re-rendering with architecture phase
+            } catch (err) {
+                console.error("Transition failed:", err);
+                throw err;
+            }
+        },
+        [projectId, transitionToArchitecture]
+    );
 
     // Run scoring and linting
     const handleLint = useCallback(() => {
@@ -153,6 +242,7 @@ export default function ProjectWorkspacePage() {
         [projectId, updateConstraints]
     );
 
+    // Loading state
     if (project === undefined) {
         return (
             <div className="flex items-center justify-center min-h-screen">
@@ -166,9 +256,61 @@ export default function ProjectWorkspacePage() {
         return null;
     }
 
+    // ─────────────────────────────────────────
+    // CHAT PHASE
+    // ─────────────────────────────────────────
+    if (phase === "chat") {
+        return (
+            <IdeaChat
+                projectId={projectId}
+                projectName={project.name}
+                initialMessages={
+                    (project.chatHistory as Array<{
+                        role: "user" | "assistant";
+                        content: string;
+                        createdAt: number;
+                    }>) ?? undefined
+                }
+                onTransitionToArchitecture={handleTransitionToArchitecture}
+            />
+        );
+    }
+
+    // ─────────────────────────────────────────
+    // ARCHITECTURE PHASE
+    // ─────────────────────────────────────────
     return (
         <ReactFlowProvider>
             <div className="h-screen flex flex-col overflow-hidden">
+                {/* Auto-generate overlay */}
+                <AnimatePresence>
+                    {isAutoGenerating && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-50 bg-background/80 backdrop-blur-md flex flex-col items-center justify-center"
+                        >
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.9, opacity: 0 }}
+                                className="flex flex-col items-center gap-4"
+                            >
+                                <div className="p-4 rounded-2xl bg-primary/10 border border-primary/20">
+                                    <Sparkles className="h-8 w-8 text-primary animate-pulse" />
+                                </div>
+                                <h2 className="text-xl font-semibold">Generating your architecture</h2>
+                                <p className="text-sm text-muted-foreground max-w-md text-center">
+                                    Building a tailored architecture based on your conversation. This
+                                    usually takes 10-20 seconds...
+                                </p>
+                                <Loader2 className="h-5 w-5 animate-spin text-primary mt-2" />
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
                 {/* Toolbar */}
                 <Toolbar
                     projectName={project.name}

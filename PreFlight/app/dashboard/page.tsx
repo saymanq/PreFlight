@@ -15,7 +15,6 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
     Plus,
@@ -45,7 +44,6 @@ export default function DashboardPage() {
     const [isOpen, setIsOpen] = useState(false);
     const [newName, setNewName] = useState("");
     const [newDescription, setNewDescription] = useState("");
-    const [newPrompt, setNewPrompt] = useState("");
 
     // Ensure user exists in Convex
     useEffect(() => {
@@ -59,12 +57,10 @@ export default function DashboardPage() {
             const projectId = await createProject({
                 name: newName,
                 description: newDescription || undefined,
-                ideaPrompt: newPrompt || undefined,
             });
             setIsOpen(false);
             setNewName("");
             setNewDescription("");
-            setNewPrompt("");
             router.push(`/project/${projectId}`);
         } catch (err) {
             console.error(err);
@@ -75,7 +71,7 @@ export default function DashboardPage() {
 
     const handleTemplateClick = (template: typeof TEMPLATES[0]) => {
         setNewName(template.name);
-        setNewPrompt(template.prompt);
+        setNewDescription(template.prompt);
         setIsOpen(true);
     };
 
@@ -122,20 +118,6 @@ export default function DashboardPage() {
                                             placeholder="Brief description of the app"
                                             className="h-9"
                                         />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-medium mb-1.5 block">
-                                            App Idea Prompt (optional)
-                                        </label>
-                                        <Textarea
-                                            value={newPrompt}
-                                            onChange={(e) => setNewPrompt(e.target.value)}
-                                            placeholder="Describe your app idea..."
-                                            className="text-xs min-h-[80px]"
-                                        />
-                                        <p className="text-[10px] text-muted-foreground mt-1">
-                                            Used for AI architecture generation in the workspace
-                                        </p>
                                     </div>
                                     <Button onClick={handleCreate} disabled={!newName.trim() || isCreating} className="w-full">
                                         {isCreating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}

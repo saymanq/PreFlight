@@ -1,5 +1,5 @@
 import { type ArchNode, type ArchEdge } from "./store";
-import { getComponentByType, type ComponentDef } from "./component-catalog";
+import { getComponentByType } from "./component-catalog";
 
 interface ScoreResult {
     score: number;
@@ -49,9 +49,13 @@ function patternAdjustments(
     const adjustments: Record<string, number> = {};
     const hits: string[] = [];
     const types = new Set(nodes.map((n) => n.data.type));
+    const hasTag = (tag: string) => nodes.some((n) => n.data.tags?.includes(tag));
 
     // LLM in architecture without queue → cost/latency risk
-    if (types.has("llm_provider") && !types.has("queue")) {
+    const hasLLM = hasTag("llm");
+    const hasAsyncBuffer =
+        types.has("queue") || types.has("event_bus") || types.has("workflow_orchestrator");
+    if (hasLLM && !hasAsyncBuffer) {
         adjustments.cost = (adjustments.cost ?? 0) + 1;
         adjustments.reliability = (adjustments.reliability ?? 0) - 1;
         hits.push("LLM without queue: potential cost and latency risk");
@@ -62,7 +66,9 @@ function patternAdjustments(
         const target = nodes.find((n) => n.id === e.target);
         return target?.data.category === "data";
     });
-    if (dataEdges.length > 3 && !types.has("redis")) {
+    const hasRuntimeCache =
+        types.has("redis") || types.has("upstash_redis") || hasTag("cache_layer");
+    if (dataEdges.length > 3 && !hasRuntimeCache) {
         adjustments.scalability = (adjustments.scalability ?? 0) - 1;
         hits.push("Multiple data connections without cache layer");
     }
@@ -75,13 +81,23 @@ function patternAdjustments(
     }
 
     // Has monitoring → reliability bonus
-    if (types.has("monitoring")) {
+    const hasObservability = nodes.some(
+        (n) =>
+            n.data.category === "observability" ||
+            n.data.type === "monitoring" ||
+            n.data.type === "analytics" ||
+            n.data.type === "error_tracking" ||
+            n.data.type === "logging_stack" ||
+            n.data.type === "tracing"
+    );
+    if (hasObservability) {
         adjustments.reliability = (adjustments.reliability ?? 0) + 1;
         hits.push("Monitoring present: reliability improved");
     }
 
     // Has CDN → scalability bonus
-    if (types.has("cdn")) {
+    const hasCDN = types.has("cdn") || hasTag("cdn_edge");
+    if (hasCDN) {
         adjustments.scalability = (adjustments.scalability ?? 0) + 1;
         hits.push("CDN present: scalability improved");
     }

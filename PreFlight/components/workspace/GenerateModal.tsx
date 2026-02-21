@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { useWorkspaceStore, type ArchNode, type ArchEdge } from "@/lib/store";
+import { useWorkspaceStore } from "@/lib/store";
 import { Sparkles, Loader2 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import { useMutation } from "convex/react";
@@ -57,35 +57,14 @@ export function GenerateModal({
             const data = await response.json();
 
             if (data.nodes && data.edges) {
-                // Position nodes in a grid layout
-                const positionedNodes: ArchNode[] = data.nodes.map(
-                    (node: ArchNode, i: number) => ({
-                        ...node,
-                        id: node.id || `gen_${node.data.type}_${i}`,
-                        type: "custom",
-                        position: node.position || {
-                            x: (i % 3) * 280 + 100,
-                            y: Math.floor(i / 3) * 200 + 100,
-                        },
-                    })
-                );
-
-                const positionedEdges: ArchEdge[] = data.edges.map(
-                    (edge: ArchEdge, i: number) => ({
-                        ...edge,
-                        id: edge.id || `edge_${i}`,
-                        type: "custom",
-                        animated: true,
-                    })
-                );
-
-                setNodes(positionedNodes);
-                setEdges(positionedEdges);
+                // API returns catalog-backed nodes and validated edges for canvas rendering
+                setNodes(data.nodes);
+                setEdges(data.edges);
 
                 // Save to Convex
                 await saveGraph({
                     projectId: projectId as Id<"projects">,
-                    graph: { nodes: positionedNodes, edges: positionedEdges },
+                    graph: { nodes: data.nodes, edges: data.edges },
                 });
 
                 onOpenChange(false);
