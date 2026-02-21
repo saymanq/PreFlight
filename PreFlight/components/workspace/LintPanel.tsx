@@ -23,9 +23,10 @@ const SEVERITY_CONFIG: Record<string, { icon: React.ElementType; color: string; 
 
 interface LintPanelProps {
     issues: LintIssue[] | null;
+    onFixWithAssistant?: (issue: LintIssue) => void;
 }
 
-export function LintPanel({ issues }: LintPanelProps) {
+export function LintPanel({ issues, onFixWithAssistant }: LintPanelProps) {
     const { setSelectedNodeId, setRightPanelTab } = useWorkspaceStore();
 
     if (!issues || issues.length === 0) {
@@ -98,6 +99,19 @@ export function LintPanel({ issues }: LintPanelProps) {
                                             <p className="text-[10px] text-primary mt-1">
                                                 💡 {issue.suggestedFix}
                                             </p>
+                                        )}
+                                        {issue.severity !== "info" && onFixWithAssistant && (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="mt-2 h-6 px-2 text-[10px]"
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    onFixWithAssistant(issue);
+                                                }}
+                                            >
+                                                Fix with Assistant
+                                            </Button>
                                         )}
                                     </div>
                                     {issue.targets.length > 0 && (

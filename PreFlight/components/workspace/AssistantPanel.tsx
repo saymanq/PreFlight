@@ -31,6 +31,12 @@ const QUICK_ACTIONS = [
     { label: "Generate Alternatives", icon: Sparkles, prompt: "Suggest alternative architectures for this project." },
 ];
 
+const LOADING_PHASES = [
+    "Reading the canvas...",
+    "Reviewing components and connections...",
+    "Planning the best update...",
+];
+
 const asString = (value: unknown): string | null =>
     typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 
@@ -93,6 +99,7 @@ export function AssistantPanel({
     constraints,
     scores,
     lintIssues,
+    queuedPrompt,
 }: {
     projectId: string;
     priorIdeaMessages: PriorIdeaMessage[];
@@ -106,12 +113,18 @@ export function AssistantPanel({
         targets: string[];
         suggestedFix: string;
     }> | null;
+    queuedPrompt?: {
+        id: number;
+        prompt: string;
+    } | null;
 }) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+    const [loadingPhaseIndex, setLoadingPhaseIndex] = useState(0);
     const scrollRef = useRef<HTMLDivElement>(null);
     const hasHydratedFromDbRef = useRef(false);
+    const lastQueuedPromptIdRef = useRef<number | null>(null);
     const { nodes, edges } = useWorkspaceStore();
     const persistedMessages = useQuery(api.projects.getAssistantThread, {
         projectId: projectId as Id<"projects">,
@@ -143,15 +156,30 @@ export function AssistantPanel({
     }, [messages]);
 
     useEffect(() => {
+        if (!isLoading) {
+            setLoadingPhaseIndex(0);
+            return;
+        }
+
+        const intervalId = setInterval(() => {
+            setLoadingPhaseIndex((prev) => (prev + 1) % LOADING_PHASES.length);
+        }, 1400);
+
+        return () => clearInterval(intervalId);
+    }, [isLoading]);
+
+    useEffect(() => {
         if (persistedMessages === undefined || hasHydratedFromDbRef.current) return;
-        const hydratedMessages: Message[] = persistedMessages.map((msg) => ({
-            role: msg.role === "assistant" ? "assistant" : "user",
-            content: msg.content,
-            createdAt: msg.createdAt,
-        }));
-        setMessages(hydratedMessages);
+        if (messages.length === 0) {
+            const hydratedMessages: Message[] = persistedMessages.map((msg) => ({
+                role: msg.role === "assistant" ? "assistant" : "user",
+                content: msg.content,
+                createdAt: msg.createdAt,
+            }));
+            setMessages(hydratedMessages);
+        }
         hasHydratedFromDbRef.current = true;
-    }, [persistedMessages]);
+    }, [persistedMessages, messages.length]);
 
     const applyCanvasAction = useCallback((rawAction: CanvasAction) => {
         const action = asString(rawAction.action)?.toLowerCase();
@@ -351,7 +379,7 @@ export function AssistantPanel({
         }
     }, []);
 
-    const sendMessage = async (userMessage: string) => {
+    const sendMessage = useCallback(async (userMessage: string) => {
         if (!userMessage.trim() || isLoading) return;
 
         const userMessageRecord: Message = {
@@ -359,8 +387,12 @@ export function AssistantPanel({
             content: userMessage,
             createdAt: Date.now(),
         };
+        const assistantCreatedAt = Date.now();
         const newMessages: Message[] = [...messages, userMessageRecord];
-        setMessages(newMessages);
+        setMessages([
+            ...newMessages,
+            { role: "assistant", content: "", createdAt: assistantCreatedAt },
+        ]);
         void persistMessages(newMessages);
         setInput("");
         setIsLoading(true);
@@ -406,12 +438,6 @@ export function AssistantPanel({
             const decoder = new TextDecoder();
             let assistantRawMessage = "";
             let appliedActionCount = 0;
-            const assistantCreatedAt = Date.now();
-
-            setMessages((prev) => [
-                ...prev,
-                { role: "assistant", content: "", createdAt: assistantCreatedAt },
-            ]);
 
             if (reader) {
                 while (true) {
@@ -489,7 +515,28 @@ export function AssistantPanel({
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [
+        applyCanvasAction,
+        constraints,
+        edges,
+        isLoading,
+        lintIssues,
+        messages,
+        nodes,
+        persistMessages,
+        priorIdeaMessages,
+        projectId,
+        scores,
+    ]);
+
+    useEffect(() => {
+        if (!queuedPrompt) return;
+        if (isLoading) return;
+        if (lastQueuedPromptIdRef.current === queuedPrompt.id) return;
+
+        lastQueuedPromptIdRef.current = queuedPrompt.id;
+        void sendMessage(queuedPrompt.prompt);
+    }, [queuedPrompt, isLoading, sendMessage]);
 
     return (
         <div className="flex flex-col h-full">
@@ -543,7 +590,15 @@ export function AssistantPanel({
                                     className="text-xs [&_p]:m-0 [&_ul]:my-1 [&_ol]:my-1 [&_pre]:my-1 [&_code]:text-[0.95em]"
                                 />
                             ) : (isLoading && i === messages.length - 1 ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
+                                <div className="relative overflow-hidden rounded-md border border-border/60 bg-background/70 px-2.5 py-2 min-w-[200px]">
+                                    <div className="absolute inset-0 shimmer opacity-25" />
+                                    <div className="relative flex items-center gap-1.5">
+                                        <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                                        <span className="text-[11px] font-medium text-foreground/90">
+                                            {LOADING_PHASES[loadingPhaseIndex]}
+                                        </span>
+                                    </div>
+                                </div>
                             ) : null)}
                         </div>
                         {msg.role === "user" && (

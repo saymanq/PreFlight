@@ -36,6 +36,48 @@ export function RightPanel({
     lintIssues,
 }: RightPanelProps) {
     const { rightPanelTab, setRightPanelTab } = useWorkspaceStore();
+    const [queuedAssistantPrompt, setQueuedAssistantPrompt] = React.useState<{
+        id: number;
+        prompt: string;
+    } | null>(null);
+
+    const handleFixWithAssistant = React.useCallback(
+        (issue: {
+            code: string;
+            severity: string;
+            title: string;
+            description: string;
+            targets: string[];
+            suggestedFix: string;
+        }) => {
+            const targetsLine =
+                issue.targets.length > 0
+                    ? `Affected components (node IDs): ${issue.targets.join(", ")}.`
+                    : "Affected components: not specified.";
+
+            const suggestedFixLine = issue.suggestedFix
+                ? `Suggested fix from lint: ${issue.suggestedFix}.`
+                : "No explicit suggested fix was provided by lint.";
+
+            const prompt = [
+                "Please fix this lint issue directly on the canvas.",
+                `Severity: ${issue.severity}.`,
+                `Code: ${issue.code}.`,
+                `Title: ${issue.title}.`,
+                `Details: ${issue.description}.`,
+                targetsLine,
+                suggestedFixLine,
+                "Apply the minimum architecture changes needed, then summarize what you changed.",
+            ].join(" ");
+
+            setQueuedAssistantPrompt({
+                id: Date.now(),
+                prompt,
+            });
+            setRightPanelTab("assistant");
+        },
+        [setRightPanelTab]
+    );
 
     return (
         <div className="w-[340px] border-l border-border bg-card/50 flex flex-col h-full">
@@ -77,7 +119,10 @@ export function RightPanel({
 
                 <TabsContent value="lint" className="flex-1 mt-0 overflow-hidden">
                     <ScrollArea className="h-full">
-                        <LintPanel issues={lintIssues} />
+                        <LintPanel
+                            issues={lintIssues}
+                            onFixWithAssistant={handleFixWithAssistant}
+                        />
                     </ScrollArea>
                 </TabsContent>
 
@@ -88,6 +133,7 @@ export function RightPanel({
                         constraints={constraints}
                         scores={scores}
                         lintIssues={lintIssues}
+                        queuedPrompt={queuedAssistantPrompt}
                     />
                 </TabsContent>
             </Tabs>
