@@ -79,19 +79,6 @@ function CustomNodeInner({ id, data, selected }: NodeProps) {
                 </div>
             </div>
 
-            {nodeData.tags.length > 0 && (
-                <div className="flex gap-1 mt-2 flex-wrap">
-                    {nodeData.tags.slice(0, 3).map((tag) => (
-                        <span
-                            key={tag}
-                            className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground"
-                        >
-                            {tag}
-                        </span>
-                    ))}
-                </div>
-            )}
-
             <Handle
                 type="source"
                 position={Position.Bottom}

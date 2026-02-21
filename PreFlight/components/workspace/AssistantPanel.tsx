@@ -37,6 +37,23 @@ const LOADING_PHASES = [
     "Planning the best update...",
 ];
 
+const messageKey = (message: Message): string =>
+    `${message.createdAt}:${message.role}:${message.content}`;
+
+const mergeMessages = (primary: Message[], secondary: Message[]): Message[] => {
+    const seen = new Set(primary.map(messageKey));
+    const merged = [...primary];
+
+    for (const message of secondary) {
+        const key = messageKey(message);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(message);
+    }
+
+    return merged;
+};
+
 const asString = (value: unknown): string | null =>
     typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 
@@ -100,6 +117,7 @@ export function AssistantPanel({
     scores,
     lintIssues,
     queuedPrompt,
+    onQueuedPromptConsumed,
 }: {
     projectId: string;
     priorIdeaMessages: PriorIdeaMessage[];
@@ -117,6 +135,7 @@ export function AssistantPanel({
         id: number;
         prompt: string;
     } | null;
+    onQueuedPromptConsumed?: (id: number) => void;
 }) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
@@ -130,6 +149,7 @@ export function AssistantPanel({
         projectId: projectId as Id<"projects">,
     });
     const saveAssistantThread = useMutation(api.projects.saveAssistantThread);
+    const isThreadLoading = persistedMessages === undefined && !hasHydratedFromDbRef.current;
 
     const persistMessages = useCallback(
         async (msgs: Message[]) => {
@@ -170,16 +190,15 @@ export function AssistantPanel({
 
     useEffect(() => {
         if (persistedMessages === undefined || hasHydratedFromDbRef.current) return;
-        if (messages.length === 0) {
-            const hydratedMessages: Message[] = persistedMessages.map((msg) => ({
-                role: msg.role === "assistant" ? "assistant" : "user",
-                content: msg.content,
-                createdAt: msg.createdAt,
-            }));
-            setMessages(hydratedMessages);
-        }
+        const hydratedMessages: Message[] = persistedMessages.map((msg) => ({
+            role: msg.role === "assistant" ? "assistant" : "user",
+            content: msg.content,
+            createdAt: msg.createdAt,
+        }));
+
+        setMessages((currentMessages) => mergeMessages(hydratedMessages, currentMessages));
         hasHydratedFromDbRef.current = true;
-    }, [persistedMessages, messages.length]);
+    }, [persistedMessages]);
 
     const applyCanvasAction = useCallback((rawAction: CanvasAction) => {
         const action = asString(rawAction.action)?.toLowerCase();
@@ -380,7 +399,15 @@ export function AssistantPanel({
     }, []);
 
     const sendMessage = useCallback(async (userMessage: string) => {
+        if (isThreadLoading) return;
         if (!userMessage.trim() || isLoading) return;
+
+        const persistedHistory: Message[] = (persistedMessages ?? []).map((msg) => ({
+            role: msg.role === "assistant" ? "assistant" : "user",
+            content: msg.content,
+            createdAt: msg.createdAt,
+        }));
+        const baseMessages = mergeMessages(persistedHistory, messages);
 
         const userMessageRecord: Message = {
             role: "user",
@@ -388,7 +415,7 @@ export function AssistantPanel({
             createdAt: Date.now(),
         };
         const assistantCreatedAt = Date.now();
-        const newMessages: Message[] = [...messages, userMessageRecord];
+        const newMessages: Message[] = [...baseMessages, userMessageRecord];
         setMessages([
             ...newMessages,
             { role: "assistant", content: "", createdAt: assistantCreatedAt },
@@ -526,6 +553,8 @@ export function AssistantPanel({
         persistMessages,
         priorIdeaMessages,
         projectId,
+        persistedMessages,
+        isThreadLoading,
         scores,
     ]);
 
@@ -533,10 +562,12 @@ export function AssistantPanel({
         if (!queuedPrompt) return;
         if (isLoading) return;
         if (lastQueuedPromptIdRef.current === queuedPrompt.id) return;
+        if (!hasHydratedFromDbRef.current && persistedMessages === undefined) return;
 
         lastQueuedPromptIdRef.current = queuedPrompt.id;
+        onQueuedPromptConsumed?.(queuedPrompt.id);
         void sendMessage(queuedPrompt.prompt);
-    }, [queuedPrompt, isLoading, sendMessage]);
+    }, [queuedPrompt, isLoading, onQueuedPromptConsumed, persistedMessages, sendMessage]);
 
     return (
         <div className="flex flex-col h-full">
@@ -622,14 +653,15 @@ export function AssistantPanel({
                                 sendMessage(input);
                             }
                         }}
-                        placeholder="Ask about your architecture..."
+                        placeholder={isThreadLoading ? "Loading assistant thread..." : "Ask about your architecture..."}
                         className="min-h-[36px] max-h-[100px] text-xs resize-none"
                         rows={1}
+                        disabled={isThreadLoading}
                     />
                     <Button
                         size="sm"
                         onClick={() => sendMessage(input)}
-                        disabled={!input.trim() || isLoading}
+                        disabled={!input.trim() || isLoading || isThreadLoading}
                         className="h-9 w-9 p-0 shrink-0"
                     >
                         {isLoading ? (

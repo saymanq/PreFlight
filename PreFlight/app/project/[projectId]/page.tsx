@@ -28,6 +28,7 @@ export default function ProjectWorkspacePage() {
     const project = useQuery(api.projects.getById, {
         projectId: projectId as Id<"projects">,
     });
+    const updateMeta = useMutation(api.projects.updateMeta);
     const saveGraph = useMutation(api.projects.saveGraph);
     const updateConstraints = useMutation(api.projects.updateConstraints);
     const saveScoresAndLint = useMutation(api.projects.saveScoresAndLint);
@@ -291,6 +292,16 @@ export default function ProjectWorkspacePage() {
         [projectId, updateConstraints]
     );
 
+    const handleRenameProject = useCallback(
+        async (name: string) => {
+            await updateMeta({
+                projectId: projectId as Id<"projects">,
+                name,
+            });
+        },
+        [projectId, updateMeta]
+    );
+
     // Loading state
     if (project === undefined) {
         return (
@@ -363,6 +374,7 @@ export default function ProjectWorkspacePage() {
                 {/* Toolbar */}
                 <Toolbar
                     projectName={project.name}
+                    onRenameProject={handleRenameProject}
                     onCompare={() => setShowCompare(true)}
                     onLint={handleLint}
                     onExport={() => setShowExport(true)}

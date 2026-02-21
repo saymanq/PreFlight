@@ -79,6 +79,12 @@ export function RightPanel({
         [setRightPanelTab]
     );
 
+    const handleQueuedPromptConsumed = React.useCallback((promptId: number) => {
+        setQueuedAssistantPrompt((current) =>
+            current && current.id === promptId ? null : current
+        );
+    }, []);
+
     return (
         <div className="w-[340px] border-l border-border bg-card/50 flex flex-col h-full">
             <Tabs
@@ -134,6 +140,7 @@ export function RightPanel({
                         scores={scores}
                         lintIssues={lintIssues}
                         queuedPrompt={queuedAssistantPrompt}
+                        onQueuedPromptConsumed={handleQueuedPromptConsumed}
                     />
                 </TabsContent>
             </Tabs>

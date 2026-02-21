@@ -121,6 +121,7 @@ export function Canvas() {
                     nodeStrokeWidth={3}
                     className="!rounded-lg"
                     maskColor="oklch(0 0 0 / 50%)"
+                    style={{ width: 130, height: 88 }}
                 />
             </ReactFlow>
         </div>
