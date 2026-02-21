@@ -7,6 +7,7 @@ import { Id } from "@/convex/_generated/dataModel";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { MarkdownContent } from "@/components/ui/markdown-content";
 import {
     ArrowUp,
     Sparkles,
@@ -329,22 +330,21 @@ export function IdeaChat({
                                         >
                                             {msg.role === "user" ? (
                                                 <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-primary text-primary-foreground px-4 py-3 text-sm">
-                                                    {msg.content}
+                                                    <MarkdownContent
+                                                        content={msg.content}
+                                                        className="[&_p]:m-0 [&_ul]:my-1 [&_ol]:my-1 [&_pre]:my-1 [&_code]:bg-primary-foreground/20"
+                                                    />
                                                 </div>
                                             ) : (
                                                 <div className="max-w-[85%] flex gap-3">
                                                     <div className="shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center mt-0.5">
                                                         <Sparkles className="h-3.5 w-3.5 text-primary" />
                                                     </div>
-                                                    <div className="text-sm text-foreground leading-relaxed prose prose-sm prose-invert max-w-none">
-                                                        {cleanDisplayContent(msg.content)
-                                                            .split("\n")
-                                                            .map((line, j) => (
-                                                                <React.Fragment key={j}>
-                                                                    {line}
-                                                                    {j < cleanDisplayContent(msg.content).split("\n").length - 1 && <br />}
-                                                                </React.Fragment>
-                                                            ))}
+                                                    <div className="text-sm text-foreground leading-relaxed max-w-none">
+                                                        <MarkdownContent
+                                                            content={cleanDisplayContent(msg.content)}
+                                                            className="[&_p]:m-0 [&_ul]:my-1 [&_ol]:my-1 [&_pre]:my-1"
+                                                        />
                                                         {isStreaming && i === messages.length - 1 && (
                                                             <span className="inline-block w-1.5 h-4 bg-primary/50 animate-pulse ml-0.5 align-text-bottom" />
                                                         )}

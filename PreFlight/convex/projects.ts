@@ -203,6 +203,96 @@ export const saveChatHistory = mutation({
     },
 });
 
+export const getAssistantThread = query({
+    args: { projectId: v.id("projects") },
+    handler: async (ctx, args) => {
+        const identity = await ctx.auth.getUserIdentity();
+        if (!identity) throw new Error("Not authenticated");
+
+        const project = await ctx.db.get(args.projectId);
+        if (!project) throw new Error("Project not found");
+
+        const user = await ctx.db
+            .query("users")
+            .withIndex("by_externalId", (q) => q.eq("externalId", identity.subject))
+            .unique();
+
+        if (!user || project.ownerId !== user._id) {
+            throw new Error("Not authorized");
+        }
+
+        const threads = await ctx.db
+            .query("assistantThreads")
+            .withIndex("by_projectId", (q) => q.eq("projectId", args.projectId))
+            .collect();
+
+        if (threads.length === 0) return [];
+
+        const latestThread = threads.reduce((latest, thread) =>
+            thread.createdAt > latest.createdAt ? thread : latest
+        );
+
+        return latestThread.messages;
+    },
+});
+
+export const saveAssistantThread = mutation({
+    args: {
+        projectId: v.id("projects"),
+        messages: v.array(
+            v.object({
+                role: v.string(),
+                content: v.string(),
+                createdAt: v.number(),
+            })
+        ),
+    },
+    handler: async (ctx, args) => {
+        const identity = await ctx.auth.getUserIdentity();
+        if (!identity) throw new Error("Not authenticated");
+
+        const project = await ctx.db.get(args.projectId);
+        if (!project) throw new Error("Project not found");
+
+        const user = await ctx.db
+            .query("users")
+            .withIndex("by_externalId", (q) => q.eq("externalId", identity.subject))
+            .unique();
+
+        if (!user || project.ownerId !== user._id) {
+            throw new Error("Not authorized");
+        }
+
+        const threads = await ctx.db
+            .query("assistantThreads")
+            .withIndex("by_projectId", (q) => q.eq("projectId", args.projectId))
+            .collect();
+
+        if (threads.length === 0) {
+            await ctx.db.insert("assistantThreads", {
+                projectId: args.projectId,
+                messages: args.messages,
+                createdAt: Date.now(),
+            });
+        } else {
+            const sorted = threads.sort((a, b) => b.createdAt - a.createdAt);
+            const [latestThread, ...staleThreads] = sorted;
+
+            await ctx.db.patch(latestThread._id, {
+                messages: args.messages,
+            });
+
+            for (const staleThread of staleThreads) {
+                await ctx.db.delete(staleThread._id);
+            }
+        }
+
+        await ctx.db.patch(args.projectId, {
+            updatedAt: Date.now(),
+        });
+    },
+});
+
 export const transitionToArchitecture = mutation({
     args: {
         projectId: v.id("projects"),

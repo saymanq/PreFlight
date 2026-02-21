@@ -1,15 +1,27 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { MarkdownContent } from "@/components/ui/markdown-content";
 import { useWorkspaceStore } from "@/lib/store";
+import { runScoring } from "@/lib/scoring-engine";
+import { runLint } from "@/lib/lint-engine";
 import { Send, Loader2, Bot, User, Sparkles, DollarSign, TrendingUp, Lightbulb } from "lucide-react";
 
 interface Message {
     role: "user" | "assistant";
     content: string;
+    createdAt: number;
+}
+
+interface PriorIdeaMessage {
+    role: "user" | "assistant";
+    content: string;
+    createdAt: number;
 }
 
 const QUICK_ACTIONS = [
@@ -19,12 +31,43 @@ const QUICK_ACTIONS = [
     { label: "Generate Alternatives", icon: Sparkles, prompt: "Suggest alternative architectures for this project." },
 ];
 
-export function AssistantPanel({ projectId }: { projectId: string }) {
+export function AssistantPanel({
+    projectId,
+    priorIdeaMessages,
+    constraints,
+}: {
+    projectId: string;
+    priorIdeaMessages: PriorIdeaMessage[];
+    constraints: Record<string, string>;
+}) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const hasHydratedFromDbRef = useRef(false);
     const { nodes, edges } = useWorkspaceStore();
+    const persistedMessages = useQuery(api.projects.getAssistantThread, {
+        projectId: projectId as Id<"projects">,
+    });
+    const saveAssistantThread = useMutation(api.projects.saveAssistantThread);
+
+    const persistMessages = useCallback(
+        async (msgs: Message[]) => {
+            try {
+                await saveAssistantThread({
+                    projectId: projectId as Id<"projects">,
+                    messages: msgs.map((msg) => ({
+                        role: msg.role,
+                        content: msg.content,
+                        createdAt: msg.createdAt,
+                    })),
+                });
+            } catch (err) {
+                console.error("Failed to persist assistant messages:", err);
+            }
+        },
+        [projectId, saveAssistantThread]
+    );
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -32,20 +75,43 @@ export function AssistantPanel({ projectId }: { projectId: string }) {
         }
     }, [messages]);
 
+    useEffect(() => {
+        if (persistedMessages === undefined || hasHydratedFromDbRef.current) return;
+        const hydratedMessages: Message[] = persistedMessages.map((msg) => ({
+            role: msg.role === "assistant" ? "assistant" : "user",
+            content: msg.content,
+            createdAt: msg.createdAt,
+        }));
+        setMessages(hydratedMessages);
+        hasHydratedFromDbRef.current = true;
+    }, [persistedMessages]);
+
     const sendMessage = async (userMessage: string) => {
         if (!userMessage.trim() || isLoading) return;
 
-        const newMessages: Message[] = [...messages, { role: "user", content: userMessage }];
+        const userMessageRecord: Message = {
+            role: "user",
+            content: userMessage,
+            createdAt: Date.now(),
+        };
+        const newMessages: Message[] = [...messages, userMessageRecord];
         setMessages(newMessages);
+        void persistMessages(newMessages);
         setInput("");
         setIsLoading(true);
 
         try {
+            const latestScores = runScoring(nodes, edges, constraints);
+            const latestLintIssues = runLint(nodes, edges, constraints);
+
             const response = await fetch("/api/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    messages: newMessages,
+                    messages: newMessages.map((m) => ({
+                        role: m.role,
+                        content: m.content,
+                    })),
                     context: {
                         projectId,
                         nodes: nodes.map((n) => ({
@@ -60,6 +126,13 @@ export function AssistantPanel({ projectId }: { projectId: string }) {
                             target: e.target,
                             type: (e.data as { relationshipType?: string })?.relationshipType ?? "invokes",
                         })),
+                        priorIdeaMessages: priorIdeaMessages.map((m) => ({
+                            role: m.role,
+                            content: m.content,
+                        })),
+                        constraints,
+                        scores: latestScores,
+                        lintIssues: latestLintIssues,
                     },
                 }),
             });
@@ -69,8 +142,12 @@ export function AssistantPanel({ projectId }: { projectId: string }) {
             const reader = response.body?.getReader();
             const decoder = new TextDecoder();
             let assistantMessage = "";
+            const assistantCreatedAt = Date.now();
 
-            setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+            setMessages((prev) => [
+                ...prev,
+                { role: "assistant", content: "", createdAt: assistantCreatedAt },
+            ]);
 
             if (reader) {
                 while (true) {
@@ -83,19 +160,40 @@ export function AssistantPanel({ projectId }: { projectId: string }) {
                         updated[updated.length - 1] = {
                             role: "assistant",
                             content: assistantMessage,
+                            createdAt: assistantCreatedAt,
                         };
                         return updated;
                     });
                 }
             }
-        } catch (error) {
-            setMessages((prev) => [
-                ...prev,
+            const finalMessages = [
+                ...newMessages,
                 {
-                    role: "assistant",
-                    content: "Sorry, I encountered an error. Please make sure the AI API is configured.",
+                    role: "assistant" as const,
+                    content: assistantMessage,
+                    createdAt: assistantCreatedAt,
                 },
-            ]);
+            ];
+            await persistMessages(finalMessages);
+        } catch {
+            const errorMessage: Message = {
+                role: "assistant",
+                content: "Sorry, I encountered an error. Please make sure the AI API is configured.",
+                createdAt: Date.now(),
+            };
+
+            setMessages((prev) => {
+                const withoutTrailingEmptyAssistant =
+                    prev.length > 0 &&
+                        prev[prev.length - 1].role === "assistant" &&
+                        prev[prev.length - 1].content === ""
+                        ? prev.slice(0, -1)
+                        : prev;
+
+                const updated = [...withoutTrailingEmptyAssistant, errorMessage];
+                void persistMessages(updated);
+                return updated;
+            });
         } finally {
             setIsLoading(false);
         }
@@ -147,7 +245,12 @@ export function AssistantPanel({ projectId }: { projectId: string }) {
                                 : "bg-muted"
                                 }`}
                         >
-                            {msg.content || (isLoading && i === messages.length - 1 ? (
+                            {msg.content ? (
+                                <MarkdownContent
+                                    content={msg.content}
+                                    className="text-xs [&_p]:m-0 [&_ul]:my-1 [&_ol]:my-1 [&_pre]:my-1 [&_code]:text-[0.95em]"
+                                />
+                            ) : (isLoading && i === messages.length - 1 ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />
                             ) : null)}
                         </div>

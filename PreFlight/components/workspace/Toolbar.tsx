@@ -5,19 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useWorkspaceStore } from "@/lib/store";
 import {
-    Sparkles,
     GitCompare,
     AlertTriangle,
     Download,
-    Undo2,
-    Redo2,
-    Save,
     Loader2,
 } from "lucide-react";
 
 interface ToolbarProps {
     projectName: string;
-    onGenerate: () => void;
     onCompare: () => void;
     onLint: () => void;
     onExport: () => void;
@@ -25,12 +20,11 @@ interface ToolbarProps {
 
 export function Toolbar({
     projectName,
-    onGenerate,
     onCompare,
     onLint,
     onExport,
 }: ToolbarProps) {
-    const { isDirty, isSaving, isGenerating } = useWorkspaceStore();
+    const { isDirty, isSaving } = useWorkspaceStore();
 
     return (
         <div className="h-12 border-b border-border bg-card/80 backdrop-blur-sm flex items-center justify-between px-4">
@@ -52,19 +46,6 @@ export function Toolbar({
             </div>
 
             <div className="flex items-center gap-1.5">
-                <Button
-                    size="sm"
-                    onClick={onGenerate}
-                    disabled={isGenerating}
-                    className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90"
-                >
-                    {isGenerating ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                        <Sparkles className="h-3.5 w-3.5" />
-                    )}
-                    Generate
-                </Button>
                 <Button
                     variant="outline"
                     size="sm"

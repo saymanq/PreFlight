@@ -11,6 +11,12 @@ import { AssistantPanel } from "./AssistantPanel";
 
 interface RightPanelProps {
     projectId: string;
+    priorIdeaMessages: Array<{
+        role: "user" | "assistant";
+        content: string;
+        createdAt: number;
+    }>;
+    constraints: Record<string, string>;
     scores: Record<string, { score: number; explanation: string }> | null;
     lintIssues: Array<{
         code: string;
@@ -22,7 +28,13 @@ interface RightPanelProps {
     }> | null;
 }
 
-export function RightPanel({ projectId, scores, lintIssues }: RightPanelProps) {
+export function RightPanel({
+    projectId,
+    priorIdeaMessages,
+    constraints,
+    scores,
+    lintIssues,
+}: RightPanelProps) {
     const { rightPanelTab, setRightPanelTab } = useWorkspaceStore();
 
     return (
@@ -70,7 +82,11 @@ export function RightPanel({ projectId, scores, lintIssues }: RightPanelProps) {
                 </TabsContent>
 
                 <TabsContent value="assistant" className="flex-1 mt-0 overflow-hidden flex flex-col">
-                    <AssistantPanel projectId={projectId} />
+                    <AssistantPanel
+                        projectId={projectId}
+                        priorIdeaMessages={priorIdeaMessages}
+                        constraints={constraints}
+                    />
                 </TabsContent>
             </Tabs>
         </div>

@@ -11,7 +11,6 @@ import { ComponentSidebar } from "@/components/workspace/ComponentSidebar";
 import { RightPanel } from "@/components/workspace/RightPanel";
 import { Toolbar } from "@/components/workspace/Toolbar";
 import { ConstraintsBar } from "@/components/workspace/ConstraintsBar";
-import { GenerateModal } from "@/components/workspace/GenerateModal";
 import { ExportModal } from "@/components/workspace/ExportModal";
 import { CompareModal } from "@/components/workspace/CompareModal";
 import { IdeaChat } from "@/components/project/IdeaChat";
@@ -44,7 +43,6 @@ export default function ProjectWorkspacePage() {
         setIsSaving,
     } = useWorkspaceStore();
 
-    const [showGenerate, setShowGenerate] = useState(false);
     const [showExport, setShowExport] = useState(false);
     const [showCompare, setShowCompare] = useState(false);
     const [isAutoGenerating, setIsAutoGenerating] = useState(false);
@@ -125,6 +123,26 @@ export default function ProjectWorkspacePage() {
         };
     }, [isDirty, nodes, edges, projectId, phase, saveGraph, setIsDirty, setIsSaving]);
 
+    const computeAndPersistScoresAndLint = useCallback(
+        async (
+            graphNodes: ArchNode[],
+            graphEdges: ArchEdge[],
+            constraintValues: Record<string, string>
+        ) => {
+            const newScores = runScoring(graphNodes, graphEdges, constraintValues);
+            const newLintIssues = runLint(graphNodes, graphEdges, constraintValues);
+            setScores(newScores);
+            setLintIssues(newLintIssues);
+
+            await saveScoresAndLint({
+                projectId: projectId as Id<"projects">,
+                scores: newScores,
+                lintIssues: newLintIssues,
+            });
+        },
+        [projectId, saveScoresAndLint]
+    );
+
     // Auto-generate architecture after transition
     const autoGenerate = useCallback(async (ideaPrompt: string, constraints: Record<string, string>) => {
         if (autoGenTriggeredRef.current) return;
@@ -152,6 +170,12 @@ export default function ProjectWorkspacePage() {
                 projectId: projectId as Id<"projects">,
                 graph: { nodes: newNodes, edges: result.edges ?? [] },
             });
+
+            await computeAndPersistScoresAndLint(
+                newNodes as ArchNode[],
+                (result.edges ?? []) as ArchEdge[],
+                constraints
+            );
         } catch (err) {
             console.error("Auto-generate failed:", err);
             // Allow retry after failure instead of permanently blocking auto-generate.
@@ -159,7 +183,7 @@ export default function ProjectWorkspacePage() {
         } finally {
             setIsAutoGenerating(false);
         }
-    }, [projectId, saveGraph, setNodes, setEdges, setIsDirty]);
+    }, [projectId, saveGraph, setNodes, setEdges, setIsDirty, computeAndPersistScoresAndLint]);
 
     // Watch for newly transitioned projects that need auto-generation
     useEffect(() => {
@@ -205,18 +229,12 @@ export default function ProjectWorkspacePage() {
     // Run scoring and linting
     const handleLint = useCallback(() => {
         const constraints = project?.constraints as Record<string, string> | undefined;
-        const newScores = runScoring(nodes, edges, constraints ?? {});
-        const newLintIssues = runLint(nodes, edges, constraints ?? {});
-        setScores(newScores);
-        setLintIssues(newLintIssues);
-
-        // Save to Convex
-        saveScoresAndLint({
-            projectId: projectId as Id<"projects">,
-            scores: newScores,
-            lintIssues: newLintIssues,
-        }).catch(console.error);
-    }, [nodes, edges, project, projectId, saveScoresAndLint]);
+        computeAndPersistScoresAndLint(
+            nodes as ArchNode[],
+            edges as ArchEdge[],
+            constraints ?? {}
+        ).catch(console.error);
+    }, [nodes, edges, project, computeAndPersistScoresAndLint]);
 
     const handleConstraintsUpdate = useCallback(
         async (newConstraints: Record<string, string | undefined>) => {
@@ -314,7 +332,6 @@ export default function ProjectWorkspacePage() {
                 {/* Toolbar */}
                 <Toolbar
                     projectName={project.name}
-                    onGenerate={() => setShowGenerate(true)}
                     onCompare={() => setShowCompare(true)}
                     onLint={handleLint}
                     onExport={() => setShowExport(true)}
@@ -331,6 +348,14 @@ export default function ProjectWorkspacePage() {
                     {/* Right panel */}
                     <RightPanel
                         projectId={projectId}
+                        priorIdeaMessages={
+                            (project.chatHistory as Array<{
+                                role: "user" | "assistant";
+                                content: string;
+                                createdAt: number;
+                            }>) ?? []
+                        }
+                        constraints={(project.constraints as Record<string, string>) ?? {}}
                         scores={scores}
                         lintIssues={lintIssues}
                     />
@@ -341,15 +366,6 @@ export default function ProjectWorkspacePage() {
                     constraints={(project.constraints as Record<string, string>) ?? {}}
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     onUpdate={handleConstraintsUpdate as any}
-                />
-
-                {/* Generate Modal */}
-                <GenerateModal
-                    open={showGenerate}
-                    onOpenChange={setShowGenerate}
-                    projectId={projectId}
-                    ideaPrompt={project.ideaPrompt ?? ""}
-                    constraints={(project.constraints as Record<string, string>) ?? {}}
                 />
 
                 {/* Export Modal */}
