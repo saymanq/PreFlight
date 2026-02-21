@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -58,38 +58,41 @@ export default function ProjectWorkspacePage() {
 
     const initializedRef = useRef(false);
     const saveTimeoutRef = useRef<NodeJS.Timeout>(undefined);
+    const scoreLintSaveTimeoutRef = useRef<NodeJS.Timeout>(undefined);
     const autoGenTriggeredRef = useRef(false);
 
     // Determine current phase
     const phase = project?.phase ?? "architecture"; // default to architecture for legacy projects
+    const currentConstraints = useMemo(
+        () => (project?.constraints as Record<string, string>) ?? {},
+        [project?.constraints]
+    );
+    const currentConstraintsKey = useMemo(
+        () => JSON.stringify(currentConstraints),
+        [currentConstraints]
+    );
 
     // Initialize canvas from project data (architecture phase only)
     useEffect(() => {
         if (project && phase === "architecture" && !initializedRef.current) {
             const projectGraph = project.graph as { nodes: ArchNode[]; edges: ArchEdge[] } | undefined;
-            const hasExistingNodes = (projectGraph?.nodes?.length ?? 0) > 0;
-
-            // Only initialize canvas if there are actual nodes.
-            // If empty, auto-generate effect will handle populating.
-            if (hasExistingNodes) {
-                setNodes(projectGraph!.nodes ?? []);
-                setEdges(projectGraph!.edges ?? []);
-                if (project.scores) {
-                    setScores(project.scores as Record<string, { score: number; explanation: string }>);
-                }
-                if (project.lintIssues) {
-                    setLintIssues(project.lintIssues as Array<{
-                        code: string;
-                        severity: string;
-                        title: string;
-                        description: string;
-                        targets: string[];
-                        suggestedFix: string;
-                    }>);
-                }
-                initializedRef.current = true;
-                setIsDirty(false);
+            setNodes(projectGraph?.nodes ?? []);
+            setEdges(projectGraph?.edges ?? []);
+            if (project.scores) {
+                setScores(project.scores as Record<string, { score: number; explanation: string }>);
             }
+            if (project.lintIssues) {
+                setLintIssues(project.lintIssues as Array<{
+                    code: string;
+                    severity: string;
+                    title: string;
+                    description: string;
+                    targets: string[];
+                    suggestedFix: string;
+                }>);
+            }
+            initializedRef.current = true;
+            setIsDirty(false);
         }
     }, [project, phase, setNodes, setEdges, setIsDirty]);
 
@@ -171,11 +174,6 @@ export default function ProjectWorkspacePage() {
                 graph: { nodes: newNodes, edges: result.edges ?? [] },
             });
 
-            await computeAndPersistScoresAndLint(
-                newNodes as ArchNode[],
-                (result.edges ?? []) as ArchEdge[],
-                constraints
-            );
         } catch (err) {
             console.error("Auto-generate failed:", err);
             // Allow retry after failure instead of permanently blocking auto-generate.
@@ -183,7 +181,7 @@ export default function ProjectWorkspacePage() {
         } finally {
             setIsAutoGenerating(false);
         }
-    }, [projectId, saveGraph, setNodes, setEdges, setIsDirty, computeAndPersistScoresAndLint]);
+    }, [projectId, saveGraph, setNodes, setEdges, setIsDirty]);
 
     // Watch for newly transitioned projects that need auto-generation
     useEffect(() => {
@@ -199,11 +197,45 @@ export default function ProjectWorkspacePage() {
             if (!hasNodes && project.ideaPrompt) {
                 autoGenerate(
                     project.ideaPrompt,
-                    (project.constraints as Record<string, string>) ?? {}
+                    currentConstraints
                 );
             }
         }
-    }, [project, phase, autoGenerate]);
+    }, [project, phase, autoGenerate, currentConstraints]);
+
+    // Recompute scores/lint in realtime as the graph changes, then persist debounced.
+    useEffect(() => {
+        if (phase !== "architecture" || !initializedRef.current) return;
+        const constraintsForRealtime = JSON.parse(currentConstraintsKey) as Record<string, string>;
+
+        const currentNodes = nodes as ArchNode[];
+        const currentEdges = edges as ArchEdge[];
+
+        const newScores = runScoring(currentNodes, currentEdges, constraintsForRealtime);
+        const newLintIssues = runLint(currentNodes, currentEdges, constraintsForRealtime);
+        setScores(newScores);
+        setLintIssues(newLintIssues);
+
+        if (scoreLintSaveTimeoutRef.current) {
+            clearTimeout(scoreLintSaveTimeoutRef.current);
+        }
+
+        scoreLintSaveTimeoutRef.current = setTimeout(() => {
+            saveScoresAndLint({
+                projectId: projectId as Id<"projects">,
+                scores: newScores,
+                lintIssues: newLintIssues,
+            }).catch((err) => {
+                console.error("Realtime score/lint save failed:", err);
+            });
+        }, 800);
+
+        return () => {
+            if (scoreLintSaveTimeoutRef.current) {
+                clearTimeout(scoreLintSaveTimeoutRef.current);
+            }
+        };
+    }, [nodes, edges, currentConstraintsKey, phase, projectId, saveScoresAndLint]);
 
     // Handle transition from chat to architecture
     const handleTransitionToArchitecture = useCallback(
@@ -228,13 +260,12 @@ export default function ProjectWorkspacePage() {
 
     // Run scoring and linting
     const handleLint = useCallback(() => {
-        const constraints = project?.constraints as Record<string, string> | undefined;
         computeAndPersistScoresAndLint(
             nodes as ArchNode[],
             edges as ArchEdge[],
-            constraints ?? {}
+            currentConstraints
         ).catch(console.error);
-    }, [nodes, edges, project, computeAndPersistScoresAndLint]);
+    }, [nodes, edges, currentConstraints, computeAndPersistScoresAndLint]);
 
     const handleConstraintsUpdate = useCallback(
         async (newConstraints: Record<string, string | undefined>) => {
@@ -355,7 +386,7 @@ export default function ProjectWorkspacePage() {
                                 createdAt: number;
                             }>) ?? []
                         }
-                        constraints={(project.constraints as Record<string, string>) ?? {}}
+                        constraints={currentConstraints}
                         scores={scores}
                         lintIssues={lintIssues}
                     />
@@ -363,7 +394,7 @@ export default function ProjectWorkspacePage() {
 
                 {/* Bottom constraints bar */}
                 <ConstraintsBar
-                    constraints={(project.constraints as Record<string, string>) ?? {}}
+                    constraints={currentConstraints}
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     onUpdate={handleConstraintsUpdate as any}
                 />

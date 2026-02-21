@@ -1,5 +1,6 @@
 import { streamText } from "ai";
 import { google } from "@ai-sdk/google";
+import { COMPONENT_CATALOG } from "@/lib/component-catalog";
 
 export async function POST(req: Request) {
     try {
@@ -12,6 +13,10 @@ export async function POST(req: Request) {
                 .trim();
 
         // Build context-aware system prompt
+        const availableComponents = COMPONENT_CATALOG
+            .map((component) => `${component.type}: ${component.label} (${component.category}, ${component.provider})`)
+            .join("\n");
+
         let systemPrompt = `You are an expert software architect assistant for the Preflight architecture planning platform. 
 You help users design, understand, and improve their software architecture.
 
@@ -34,10 +39,10 @@ ${priorConversation}`;
         if (context?.nodes?.length > 0) {
             systemPrompt += `\n\nCurrent Architecture Context:
 Components (${context.nodes.length}):
-${context.nodes.map((n: { label: string; type: string; category: string; provider: string }) => `- ${n.label} (${n.type}, ${n.category}, provider: ${n.provider})`).join("\n")}
+${context.nodes.map((n: { id: string; label: string; type: string; category: string; provider: string }) => `- ${n.id}: ${n.label} (${n.type}, ${n.category}, provider: ${n.provider})`).join("\n")}
 
 Connections (${context.edges?.length ?? 0}):
-${(context.edges ?? []).map((e: { source: string; target: string; type: string }) => `- ${e.source} → ${e.target} (${e.type})`).join("\n")}`;
+${(context.edges ?? []).map((e: { id?: string; source: string; target: string; type: string }) => `- ${e.id ?? "edge"}: ${e.source} → ${e.target} (${e.type})`).join("\n")}`;
         } else {
             systemPrompt += `\n\nThe user's canvas is currently empty. Help them get started by suggesting architectures.`;
         }
@@ -74,7 +79,26 @@ ${(context.edges ?? []).map((e: { source: string; target: string; type: string }
         systemPrompt += `\n\nImportant:
 - The visible assistant thread here may be short; still use prior conversation context above.
 - Do not restate the full history unless user asks.
-- Focus on actionable follow-up guidance for the current architecture.`;
+- Focus on actionable follow-up guidance for the current architecture.
+
+Canvas Editing Protocol:
+- If the user asks for architecture changes, emit one or more canvas action blocks before your explanation.
+- Each block must be valid JSON inside XML tags on its own line, without markdown code fences:
+<canvas_action>{"action":"add_component","componentType":"nextjs_app","nodeId":"web_app","label":"Web App","x":120,"y":80}</canvas_action>
+- Allowed actions:
+  1) add_component: { action, componentType, nodeId?, label?, provider?, x?, y?, tags?, config? }
+  2) move_component: { action, nodeId, x?, y? }
+  3) update_component: { action, nodeId, newLabel?, provider?, tags?, config? }
+  4) remove_component: { action, nodeId }
+  5) connect_components: { action, sourceId, targetId, relationshipType?, protocol?, edgeId? }
+  6) remove_connection: { action, edgeId } or { action, sourceId, targetId }
+- Use only these action names.
+- Use existing node IDs exactly when modifying/moving/removing.
+- Use only componentType values from the catalog below when adding nodes.
+- After action blocks, give a concise explanation of what changed.
+
+Available Component Types:
+${availableComponents}`;
 
         const result = streamText({
             model: google("gemini-3.1-pro-preview"),

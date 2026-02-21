@@ -11,12 +11,13 @@ import {
     CATEGORY_LABELS,
     CATEGORY_COLORS,
     type ComponentDef,
+    type ComponentCategory,
 } from "@/lib/component-catalog";
 import { useWorkspaceStore } from "@/lib/store";
 import {
     Globe, Monitor, Smartphone, Server, Network, Cog, ExternalLink,
     Database, Zap, Layers, Shield, Lock, HardDrive, Brain, ShieldCheck,
-    List, Clock, BarChart3, Activity, Search,
+    List, Clock, BarChart3, Activity, Search, ChevronRight,
 } from "lucide-react";
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -63,18 +64,35 @@ function ComponentItem({ component }: { component: ComponentDef }) {
 
 import { FeaturesList } from "@/components/workspace/FeaturesList";
 
+const INITIAL_EXPANDED_CATEGORIES = CATEGORY_ORDER.reduce((acc, category, index) => {
+    acc[category] = index === 0;
+    return acc;
+}, {} as Record<ComponentCategory, boolean>);
+
 export function ComponentSidebar({ projectId }: { projectId: string }) {
     const { leftSidebarTab, setLeftSidebarTab } = useWorkspaceStore();
     const [search, setSearch] = React.useState("");
+    const [expandedCategories, setExpandedCategories] = React.useState<Record<ComponentCategory, boolean>>(
+        INITIAL_EXPANDED_CATEGORIES
+    );
+
+    const searchQuery = search.trim().toLowerCase();
 
     const filteredComponents = COMPONENT_CATALOG.filter(
         (c) =>
-            c.label.toLowerCase().includes(search.toLowerCase()) ||
-            c.provider.toLowerCase().includes(search.toLowerCase()) ||
-            c.tags.some((t) => t.toLowerCase().includes(search.toLowerCase())) ||
-            c.capabilities.some((cap) => cap.toLowerCase().includes(search.toLowerCase())) ||
-            c.subcategory?.toLowerCase().includes(search.toLowerCase())
+            c.label.toLowerCase().includes(searchQuery) ||
+            c.provider.toLowerCase().includes(searchQuery) ||
+            c.tags.some((t) => t.toLowerCase().includes(searchQuery)) ||
+            c.capabilities.some((cap) => cap.toLowerCase().includes(searchQuery)) ||
+            c.subcategory?.toLowerCase().includes(searchQuery)
     );
+
+    const toggleCategory = (category: ComponentCategory) => {
+        setExpandedCategories((prev) => ({
+            ...prev,
+            [category]: !prev[category],
+        }));
+    };
 
     return (
         <div className="w-[260px] border-r border-border bg-card/50 flex flex-col h-full min-h-0">
@@ -107,6 +125,7 @@ export function ComponentSidebar({ projectId }: { projectId: string }) {
                             {CATEGORY_ORDER.map((cat) => {
                                 const items = filteredComponents.filter((c) => c.category === cat);
                                 if (items.length === 0) return null;
+                                const isExpanded = searchQuery.length > 0 || expandedCategories[cat];
 
                                 const grouped = items.reduce<Record<string, ComponentDef[]>>((acc, component) => {
                                     const key = component.subcategory ?? "General";
@@ -116,27 +135,45 @@ export function ComponentSidebar({ projectId }: { projectId: string }) {
                                 }, {});
 
                                 return (
-                                    <div key={cat}>
-                                        <p
-                                            className="text-[10px] font-semibold uppercase tracking-wider mb-1.5 px-1"
-                                            style={{ color: CATEGORY_COLORS[cat] }}
+                                    <div key={cat} className="border border-border/60 rounded-lg overflow-hidden bg-background/40">
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleCategory(cat)}
+                                            className="w-full flex items-center justify-between px-2.5 py-2 hover:bg-accent/40 transition-colors"
                                         >
-                                            {CATEGORY_LABELS[cat]}
-                                        </p>
-                                        <div className="space-y-2">
-                                            {Object.entries(grouped).map(([group, groupItems]) => (
-                                                <div key={group}>
-                                                    <p className="text-[10px] text-muted-foreground px-1 mb-1">
-                                                        {group}
-                                                    </p>
-                                                    <div className="space-y-0.5">
-                                                        {groupItems.map((component) => (
-                                                            <ComponentItem key={component.type} component={component} />
-                                                        ))}
+                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                <ChevronRight
+                                                    className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""
+                                                        }`}
+                                                />
+                                                <p
+                                                    className="text-[10px] font-semibold uppercase tracking-wider truncate"
+                                                    style={{ color: CATEGORY_COLORS[cat] }}
+                                                >
+                                                    {CATEGORY_LABELS[cat]}
+                                                </p>
+                                            </div>
+                                            <Badge variant="secondary" className="text-[9px] h-5 px-1.5 shrink-0">
+                                                {items.length}
+                                            </Badge>
+                                        </button>
+
+                                        {isExpanded && (
+                                            <div className="px-2.5 pb-2 space-y-2">
+                                                {Object.entries(grouped).map(([group, groupItems]) => (
+                                                    <div key={group}>
+                                                        <p className="text-[10px] text-muted-foreground px-1 mb-1">
+                                                            {group}
+                                                        </p>
+                                                        <div className="space-y-0.5">
+                                                            {groupItems.map((component) => (
+                                                                <ComponentItem key={component.type} component={component} />
+                                                            ))}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))}
-                                        </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}

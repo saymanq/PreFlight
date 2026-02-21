@@ -86,6 +86,8 @@ export function RightPanel({
                         projectId={projectId}
                         priorIdeaMessages={priorIdeaMessages}
                         constraints={constraints}
+                        scores={scores}
+                        lintIssues={lintIssues}
                     />
                 </TabsContent>
             </Tabs>

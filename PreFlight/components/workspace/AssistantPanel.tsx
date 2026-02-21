@@ -7,9 +7,9 @@ import { Id } from "@/convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MarkdownContent } from "@/components/ui/markdown-content";
-import { useWorkspaceStore } from "@/lib/store";
-import { runScoring } from "@/lib/scoring-engine";
-import { runLint } from "@/lib/lint-engine";
+import { extractCanvasActions, stripCanvasActions, type CanvasAction } from "@/lib/assistant-canvas-actions";
+import { getComponentByType } from "@/lib/component-catalog";
+import { useWorkspaceStore, type ArchEdge, type ArchNode } from "@/lib/store";
 import { Send, Loader2, Bot, User, Sparkles, DollarSign, TrendingUp, Lightbulb } from "lucide-react";
 
 interface Message {
@@ -31,14 +31,81 @@ const QUICK_ACTIONS = [
     { label: "Generate Alternatives", icon: Sparkles, prompt: "Suggest alternative architectures for this project." },
 ];
 
+const asString = (value: unknown): string | null =>
+    typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+
+const asNumber = (value: unknown): number | null =>
+    typeof value === "number" && Number.isFinite(value) ? value : null;
+
+const asStringArray = (value: unknown): string[] | null => {
+    if (!Array.isArray(value)) return null;
+    const result = value.filter((item): item is string => typeof item === "string" && item.length > 0);
+    return result.length > 0 ? result : null;
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+    typeof value === "object" && value !== null && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : null;
+
+const normalize = (value: string): string => value.trim().toLowerCase();
+
+const resolveNodeId = (nodes: ArchNode[], hint: string | null): string | null => {
+    if (!hint) return null;
+    const normalizedHint = normalize(hint);
+
+    const directIdMatch = nodes.find((node) => node.id === hint);
+    if (directIdMatch) return directIdMatch.id;
+
+    const caseInsensitiveIdMatch = nodes.find((node) => normalize(node.id) === normalizedHint);
+    if (caseInsensitiveIdMatch) return caseInsensitiveIdMatch.id;
+
+    const labelMatch = nodes.find((node) => normalize(node.data.label) === normalizedHint);
+    if (labelMatch) return labelMatch.id;
+
+    const fuzzyLabelMatch = nodes.find((node) => normalize(node.data.label).includes(normalizedHint));
+    return fuzzyLabelMatch?.id ?? null;
+};
+
+const ensureUniqueNodeId = (nodes: ArchNode[], preferredId: string): string => {
+    if (!nodes.some((node) => node.id === preferredId)) return preferredId;
+
+    let counter = 1;
+    while (nodes.some((node) => node.id === `${preferredId}_${counter}`)) {
+        counter += 1;
+    }
+    return `${preferredId}_${counter}`;
+};
+
+const ensureUniqueEdgeId = (edges: ArchEdge[], preferredId: string): string => {
+    if (!edges.some((edge) => edge.id === preferredId)) return preferredId;
+
+    let counter = 1;
+    while (edges.some((edge) => edge.id === `${preferredId}_${counter}`)) {
+        counter += 1;
+    }
+    return `${preferredId}_${counter}`;
+};
+
 export function AssistantPanel({
     projectId,
     priorIdeaMessages,
     constraints,
+    scores,
+    lintIssues,
 }: {
     projectId: string;
     priorIdeaMessages: PriorIdeaMessage[];
     constraints: Record<string, string>;
+    scores: Record<string, { score: number; explanation: string }> | null;
+    lintIssues: Array<{
+        code: string;
+        severity: string;
+        title: string;
+        description: string;
+        targets: string[];
+        suggestedFix: string;
+    }> | null;
 }) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
@@ -86,6 +153,204 @@ export function AssistantPanel({
         hasHydratedFromDbRef.current = true;
     }, [persistedMessages]);
 
+    const applyCanvasAction = useCallback((rawAction: CanvasAction) => {
+        const action = asString(rawAction.action)?.toLowerCase();
+        if (!action) return;
+
+        const state = useWorkspaceStore.getState();
+        const currentNodes = state.nodes;
+        const currentEdges = state.edges;
+
+        if (action === "add_component" || action === "add-node" || action === "create_component") {
+            const componentType =
+                asString(rawAction.componentType) ??
+                asString(rawAction.type) ??
+                asString(rawAction.component);
+            if (!componentType) return;
+
+            const component = getComponentByType(componentType);
+            if (!component) return;
+
+            const preferredNodeId =
+                asString(rawAction.nodeId) ??
+                asString(rawAction.id) ??
+                `${componentType}_${Date.now()}`;
+            const nodeId = ensureUniqueNodeId(currentNodes, preferredNodeId);
+            const x = asNumber(rawAction.x) ?? 80 + (currentNodes.length % 4) * 260;
+            const y = asNumber(rawAction.y) ?? 80 + Math.floor(currentNodes.length / 4) * 180;
+            const label = asString(rawAction.label) ?? component.label;
+            const provider = asString(rawAction.provider) ?? component.provider;
+            const configPatch = asRecord(rawAction.config) ?? {};
+            const tags = asStringArray(rawAction.tags) ?? component.tags;
+
+            const newNode: ArchNode = {
+                id: nodeId,
+                type: "custom",
+                position: { x, y },
+                data: {
+                    type: component.type,
+                    category: component.category,
+                    label,
+                    provider,
+                    icon: component.icon,
+                    config: { ...component.defaultConfig, ...configPatch },
+                    tags,
+                },
+            };
+
+            state.setNodes([...currentNodes, newNode]);
+            return;
+        }
+
+        if (action === "remove_component" || action === "delete_component" || action === "remove-node") {
+            const nodeHint =
+                asString(rawAction.nodeId) ??
+                asString(rawAction.id) ??
+                asString(rawAction.label);
+            const nodeId = resolveNodeId(currentNodes, nodeHint);
+            if (!nodeId) return;
+
+            state.removeNode(nodeId);
+            return;
+        }
+
+        if (action === "move_component" || action === "move-node" || action === "reposition_component") {
+            const nodeHint =
+                asString(rawAction.nodeId) ??
+                asString(rawAction.id) ??
+                asString(rawAction.label);
+            const nodeId = resolveNodeId(currentNodes, nodeHint);
+            if (!nodeId) return;
+
+            const x = asNumber(rawAction.x);
+            const y = asNumber(rawAction.y);
+            if (x === null && y === null) return;
+
+            state.setNodes(
+                currentNodes.map((node) =>
+                    node.id !== nodeId
+                        ? node
+                        : {
+                            ...node,
+                            position: {
+                                x: x ?? node.position.x,
+                                y: y ?? node.position.y,
+                            },
+                        }
+                )
+            );
+            return;
+        }
+
+        if (action === "update_component" || action === "edit_component") {
+            const nodeHint =
+                asString(rawAction.nodeId) ??
+                asString(rawAction.id) ??
+                asString(rawAction.label);
+            const nodeId = resolveNodeId(currentNodes, nodeHint);
+            if (!nodeId) return;
+
+            const label = asString(rawAction.newLabel) ?? asString(rawAction.label);
+            const provider = asString(rawAction.provider);
+            const configPatch = asRecord(rawAction.config);
+            const tags = asStringArray(rawAction.tags);
+
+            state.setNodes(
+                currentNodes.map((node) =>
+                    node.id !== nodeId
+                        ? node
+                        : {
+                            ...node,
+                            data: {
+                                ...node.data,
+                                label: label ?? node.data.label,
+                                provider: provider ?? node.data.provider,
+                                tags: tags ?? node.data.tags,
+                                config: configPatch ? { ...node.data.config, ...configPatch } : node.data.config,
+                            },
+                        }
+                )
+            );
+            return;
+        }
+
+        if (action === "connect_components" || action === "add_connection" || action === "connect") {
+            const sourceHint =
+                asString(rawAction.sourceId) ??
+                asString(rawAction.source) ??
+                asString(rawAction.from) ??
+                asString(rawAction.sourceLabel);
+            const targetHint =
+                asString(rawAction.targetId) ??
+                asString(rawAction.target) ??
+                asString(rawAction.to) ??
+                asString(rawAction.targetLabel);
+
+            const sourceId = resolveNodeId(currentNodes, sourceHint);
+            const targetId = resolveNodeId(currentNodes, targetHint);
+            if (!sourceId || !targetId || sourceId === targetId) return;
+
+            const relationshipType =
+                asString(rawAction.relationshipType) ??
+                asString(rawAction.relationship) ??
+                "invokes";
+            const protocol = asString(rawAction.protocol) ?? "RPC";
+
+            const alreadyConnected = currentEdges.some(
+                (edge) =>
+                    edge.source === sourceId &&
+                    edge.target === targetId &&
+                    (edge.data?.relationshipType ?? "invokes") === relationshipType
+            );
+            if (alreadyConnected) return;
+
+            const preferredEdgeId =
+                asString(rawAction.edgeId) ?? `${sourceId}_${targetId}_${relationshipType}`;
+            const edgeId = ensureUniqueEdgeId(currentEdges, preferredEdgeId);
+
+            const newEdge: ArchEdge = {
+                id: edgeId,
+                type: "custom",
+                source: sourceId,
+                target: targetId,
+                animated: true,
+                data: {
+                    relationshipType,
+                    protocol,
+                },
+            };
+
+            state.setEdges([...currentEdges, newEdge]);
+            return;
+        }
+
+        if (action === "remove_connection" || action === "delete_connection" || action === "disconnect") {
+            const edgeId = asString(rawAction.edgeId);
+            if (edgeId) {
+                state.setEdges(currentEdges.filter((edge) => edge.id !== edgeId));
+                return;
+            }
+
+            const sourceHint =
+                asString(rawAction.sourceId) ??
+                asString(rawAction.source) ??
+                asString(rawAction.from) ??
+                asString(rawAction.sourceLabel);
+            const targetHint =
+                asString(rawAction.targetId) ??
+                asString(rawAction.target) ??
+                asString(rawAction.to) ??
+                asString(rawAction.targetLabel);
+            const sourceId = resolveNodeId(currentNodes, sourceHint);
+            const targetId = resolveNodeId(currentNodes, targetHint);
+            if (!sourceId || !targetId) return;
+
+            state.setEdges(
+                currentEdges.filter((edge) => !(edge.source === sourceId && edge.target === targetId))
+            );
+        }
+    }, []);
+
     const sendMessage = async (userMessage: string) => {
         if (!userMessage.trim() || isLoading) return;
 
@@ -101,9 +366,6 @@ export function AssistantPanel({
         setIsLoading(true);
 
         try {
-            const latestScores = runScoring(nodes, edges, constraints);
-            const latestLintIssues = runLint(nodes, edges, constraints);
-
             const response = await fetch("/api/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -122,6 +384,7 @@ export function AssistantPanel({
                             provider: n.data.provider,
                         })),
                         edges: edges.map((e) => ({
+                            id: e.id,
                             source: e.source,
                             target: e.target,
                             type: (e.data as { relationshipType?: string })?.relationshipType ?? "invokes",
@@ -131,8 +394,8 @@ export function AssistantPanel({
                             content: m.content,
                         })),
                         constraints,
-                        scores: latestScores,
-                        lintIssues: latestLintIssues,
+                        scores,
+                        lintIssues,
                     },
                 }),
             });
@@ -141,7 +404,8 @@ export function AssistantPanel({
 
             const reader = response.body?.getReader();
             const decoder = new TextDecoder();
-            let assistantMessage = "";
+            let assistantRawMessage = "";
+            let appliedActionCount = 0;
             const assistantCreatedAt = Date.now();
 
             setMessages((prev) => [
@@ -154,23 +418,51 @@ export function AssistantPanel({
                     const { done, value } = await reader.read();
                     if (done) break;
                     const chunk = decoder.decode(value, { stream: true });
-                    assistantMessage += chunk;
+                    assistantRawMessage += chunk;
+
+                    const parsedActions = extractCanvasActions(assistantRawMessage);
+                    if (parsedActions.length > appliedActionCount) {
+                        const nextActions = parsedActions.slice(appliedActionCount);
+                        nextActions.forEach(applyCanvasAction);
+                        appliedActionCount = parsedActions.length;
+                    }
+
+                    const visibleAssistantContent = stripCanvasActions(assistantRawMessage);
                     setMessages((prev) => {
                         const updated = [...prev];
                         updated[updated.length - 1] = {
                             role: "assistant",
-                            content: assistantMessage,
+                            content: visibleAssistantContent,
                             createdAt: assistantCreatedAt,
                         };
                         return updated;
                     });
                 }
             }
+
+            const finalVisibleContent = stripCanvasActions(assistantRawMessage);
+            const finalAssistantContent =
+                finalVisibleContent.length > 0
+                    ? finalVisibleContent
+                    : appliedActionCount > 0
+                        ? "Applied the requested canvas updates."
+                        : "";
+
+            setMessages((prev) => {
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                    role: "assistant",
+                    content: finalAssistantContent,
+                    createdAt: assistantCreatedAt,
+                };
+                return updated;
+            });
+
             const finalMessages = [
                 ...newMessages,
                 {
                     role: "assistant" as const,
-                    content: assistantMessage,
+                    content: finalAssistantContent,
                     createdAt: assistantCreatedAt,
                 },
             ];
