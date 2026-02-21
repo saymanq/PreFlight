@@ -13,6 +13,7 @@ import { Toolbar } from "@/components/workspace/Toolbar";
 import { ConstraintsBar } from "@/components/workspace/ConstraintsBar";
 import { GenerateModal } from "@/components/workspace/GenerateModal";
 import { ExportModal } from "@/components/workspace/ExportModal";
+import { CompareModal } from "@/components/workspace/CompareModal";
 import { useWorkspaceStore, type ArchNode, type ArchEdge } from "@/lib/store";
 import { runScoring } from "@/lib/scoring-engine";
 import { runLint } from "@/lib/lint-engine";
@@ -42,6 +43,7 @@ export default function ProjectWorkspacePage() {
 
     const [showGenerate, setShowGenerate] = useState(false);
     const [showExport, setShowExport] = useState(false);
+    const [showCompare, setShowCompare] = useState(false);
     const [scores, setScores] = useState<Record<string, { score: number; explanation: string }> | null>(null);
     const [lintIssues, setLintIssues] = useState<Array<{
         code: string;
@@ -171,7 +173,7 @@ export default function ProjectWorkspacePage() {
                 <Toolbar
                     projectName={project.name}
                     onGenerate={() => setShowGenerate(true)}
-                    onCompare={() => { }}
+                    onCompare={() => setShowCompare(true)}
                     onLint={handleLint}
                     onExport={() => setShowExport(true)}
                 />
@@ -217,6 +219,13 @@ export default function ProjectWorkspacePage() {
                     edges={edges}
                     scores={scores}
                     lintIssues={lintIssues}
+                />
+
+                {/* Compare Modal */}
+                <CompareModal
+                    open={showCompare}
+                    onOpenChange={setShowCompare}
+                    projectId={projectId}
                 />
             </div>
         </ReactFlowProvider>

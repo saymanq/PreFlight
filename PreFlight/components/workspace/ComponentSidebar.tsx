@@ -65,14 +65,7 @@ function ComponentItem({ component }: { component: ComponentDef }) {
     );
 }
 
-function FeaturesList({ projectId }: { projectId: string }) {
-    return (
-        <div className="p-4 text-center text-sm text-muted-foreground">
-            <p>Feature planner will be available after AI generation.</p>
-            <p className="text-xs mt-2">Add features to plan architecture changes per feature.</p>
-        </div>
-    );
-}
+import { FeaturesList } from "@/components/workspace/FeaturesList";
 
 export function ComponentSidebar({ projectId }: { projectId: string }) {
     const { leftSidebarTab, setLeftSidebarTab } = useWorkspaceStore();

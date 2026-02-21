@@ -178,6 +178,16 @@ export const createVersionSnapshot = mutation({
     },
 });
 
+export const listVersions = query({
+    args: { projectId: v.id("projects") },
+    handler: async (ctx, args) => {
+        return await ctx.db
+            .query("projectVersions")
+            .withIndex("by_projectId", (q) => q.eq("projectId", args.projectId))
+            .collect();
+    },
+});
+
 export const remove = mutation({
     args: { projectId: v.id("projects") },
     handler: async (ctx, args) => {
