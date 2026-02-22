@@ -1,5 +1,9 @@
 import { google } from "@ai-sdk/google";
 import { generateText } from "ai";
+import {
+    FAST_OUTPUT_TOKENS,
+    LOW_REASONING_PROVIDER_OPTIONS,
+} from "@/lib/ai/google-generation";
 
 export async function POST(req: Request) {
     try {
@@ -32,6 +36,8 @@ export async function POST(req: Request) {
 
         const result = await generateText({
             model: google("gemini-3-flash-preview"),
+            maxOutputTokens: FAST_OUTPUT_TOKENS.exportPack,
+            providerOptions: LOW_REASONING_PROVIDER_OPTIONS,
             prompt: `You are an expert software architect. Generate a comprehensive implementation prompt pack for the following architecture.
 
 PROJECT: ${projectName}

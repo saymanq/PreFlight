@@ -2,6 +2,10 @@ import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
 import { COMPONENT_LIBRARY } from "@/lib/components-data";
+import {
+  FAST_OUTPUT_TOKENS,
+  LOW_REASONING_PROVIDER_OPTIONS,
+} from "@/lib/ai/google-generation";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -198,6 +202,8 @@ ${transcript}`;
       system: systemPrompt,
       prompt,
       temperature: 0.35,
+      maxOutputTokens: FAST_OUTPUT_TOKENS.ideation,
+      providerOptions: LOW_REASONING_PROVIDER_OPTIONS,
     });
 
     const assistantMessage =

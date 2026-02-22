@@ -40,6 +40,13 @@ const messageValidator = v.object({
   createdAt: v.number(),
 });
 
+const generationStatusValidator = v.union(
+  v.literal("pending"),
+  v.literal("generating"),
+  v.literal("ready"),
+  v.literal("failed")
+);
+
 const DEFAULT_CONSTRAINTS = {
   budgetLevel: "medium",
   teamSize: 2,
@@ -107,7 +114,7 @@ export const createFromIdeation = mutation({
   args: {
     threadId: v.id("chatThreads"),
     selectedComponentIds: v.array(v.string()),
-    graph: graphValidator,
+    graph: v.optional(graphValidator),
     name: v.optional(v.string()),
     description: v.optional(v.string()),
     constraints: v.optional(constraintsValidator),
@@ -124,14 +131,21 @@ export const createFromIdeation = mutation({
 
     const now = Date.now();
     const name = args.name?.trim() || thread.title || "My Architecture";
+    const graph = args.graph ?? { nodes: [], edges: [] };
+    const generationStatus = graph.nodes.length > 0 ? "ready" : "pending";
 
     const projectId = await ctx.db.insert("projects", {
       ownerId: user._id,
       name,
       description: args.description?.trim() || undefined,
+      generationStatus,
+      generationError: undefined,
+      generationStartedAt: generationStatus === "pending" ? undefined : now,
+      generationCompletedAt: generationStatus === "ready" ? now : undefined,
+      generationMeta: undefined,
       constraints: args.constraints ?? DEFAULT_CONSTRAINTS,
-      graph: args.graph,
-      nodeCount: args.graph.nodes.length,
+      graph,
+      nodeCount: graph.nodes.length,
       overallScore: undefined,
       scores: undefined,
       lintIssues: [],
@@ -194,11 +208,69 @@ export const updateGraph = mutation({
     const user = await getOrCreateUser(ctx);
     await assertProjectOwnership(ctx, args.projectId, user._id);
 
-    await ctx.db.patch(args.projectId, {
+    const now = Date.now();
+    const patch: Record<string, unknown> = {
       graph: args.graph,
       nodeCount: args.graph.nodes.length,
-      updatedAt: Date.now(),
-    });
+      updatedAt: now,
+    };
+
+    if (args.graph.nodes.length > 0) {
+      patch.generationStatus = "ready";
+      patch.generationError = undefined;
+      patch.generationCompletedAt = now;
+    }
+
+    await ctx.db.patch(args.projectId, patch);
+  },
+});
+
+export const updateGenerationState = mutation({
+  args: {
+    projectId: v.id("projects"),
+    status: generationStatusValidator,
+    error: v.optional(v.string()),
+    source: v.optional(v.string()),
+    usedFallback: v.optional(v.boolean()),
+    rationale: v.optional(v.string()),
+    assumptions: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    const user = await getOrCreateUser(ctx);
+    await assertProjectOwnership(ctx, args.projectId, user._id);
+
+    const now = Date.now();
+    const patch: Record<string, unknown> = {
+      generationStatus: args.status,
+      updatedAt: now,
+    };
+
+    if (args.status === "generating") {
+      patch.generationStartedAt = now;
+      patch.generationError = undefined;
+    } else if (args.status === "ready") {
+      patch.generationCompletedAt = now;
+      patch.generationError = undefined;
+    } else if (args.status === "failed") {
+      patch.generationError = args.error ?? "Generation failed";
+      patch.generationCompletedAt = now;
+    }
+
+    if (
+      args.source !== undefined ||
+      args.usedFallback !== undefined ||
+      args.rationale !== undefined ||
+      args.assumptions !== undefined
+    ) {
+      const meta: Record<string, unknown> = {};
+      if (args.source !== undefined) meta.source = args.source;
+      if (args.usedFallback !== undefined) meta.usedFallback = args.usedFallback;
+      if (args.rationale !== undefined) meta.rationale = args.rationale;
+      if (args.assumptions !== undefined) meta.assumptions = args.assumptions;
+      patch.generationMeta = meta;
+    }
+
+    await ctx.db.patch(args.projectId, patch);
   },
 });
 
@@ -306,6 +378,11 @@ export const create = mutation({
       ownerId: user._id,
       name: args.name,
       description: args.description,
+      generationStatus: "ready",
+      generationError: undefined,
+      generationStartedAt: undefined,
+      generationCompletedAt: undefined,
+      generationMeta: undefined,
       constraints: args.constraints ?? DEFAULT_CONSTRAINTS,
       graph: args.graph ?? { nodes: [], edges: [] },
       nodeCount: args.graph?.nodes.length ?? 0,

@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ReactFlowProvider } from "@xyflow/react";
-import { useQuery, useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import ArchitectureCanvas from "@/components/canvas/ArchitectureCanvas";
 import ComponentLibrary from "@/components/sidebar/ComponentLibrary";
@@ -12,6 +12,7 @@ import RightSidebar, { type RightSidebarTab } from "@/components/sidebar/RightSi
 import { useArchitectureStore } from "@/lib/architecture-store";
 import { scoreArchitecture } from "@/lib/scoring/score-engine";
 import { runLinter } from "@/lib/linting/lint-engine";
+import { buildGraphFromComponentIds } from "@/lib/generation/graph-builder";
 import {
   ArrowLeft,
   Sparkles,
@@ -24,48 +25,206 @@ import {
   Loader2,
 } from "lucide-react";
 
+type GenerationStatus = "pending" | "generating" | "ready" | "failed";
+
 export default function ProjectWorkspacePage() {
   const { projectId } = useParams<{ projectId: string }>();
   const project = useQuery(
     api.projects.get,
     projectId ? { id: projectId as any } : "skip"
   );
+
   const updateGraph = useMutation(api.projects.updateGraph);
   const updateMeta = useMutation(api.projects.updateMeta);
+  const updateConstraintsMutation = useMutation(api.projects.updateConstraints);
+  const updateGenerationState = useMutation(api.projects.updateGenerationState);
 
   const [projectName, setProjectName] = useState("Untitled Project");
   const [editingName, setEditingName] = useState(false);
   const [saved, setSaved] = useState(true);
   const [rightTab, setRightTab] = useState<RightSidebarTab>("scores");
   const [hydrated, setHydrated] = useState(false);
+  const [isGeneratingArchitecture, setIsGeneratingArchitecture] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
 
   const nodes = useArchitectureStore((s) => s.nodes);
   const edges = useArchitectureStore((s) => s.edges);
+  const constraints = useArchitectureStore((s) => s.constraints);
   const setNodes = useArchitectureStore((s) => s.setNodes);
   const setEdges = useArchitectureStore((s) => s.setEdges);
+  const setConstraints = useArchitectureStore((s) => s.setConstraints);
+  const resetConstraints = useArchitectureStore((s) => s.resetConstraints);
   const setProjectNameInStore = useArchitectureStore((s) => s.setProjectName);
-  const constraints = useArchitectureStore((s) => s.constraints);
   const setScores = useArchitectureStore((s) => s.setScores);
   const setLintIssues = useArchitectureStore((s) => s.setLintIssues);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const constraintsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const analysisTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const initialHydrationDone = useRef(false);
+  const hydratedProjectRef = useRef<string | null>(null);
+  const didHydrateConstraintsRef = useRef(false);
+  const generationStartedForProjectRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (project && !initialHydrationDone.current) {
-      setProjectName(project.name);
-      setProjectNameInStore(project.name);
-      if (project.graph?.nodes?.length) setNodes(project.graph.nodes as any);
-      if (project.graph?.edges?.length) setEdges(project.graph.edges as any);
-      initialHydrationDone.current = true;
-      setHydrated(true);
+    if (!projectId) return;
+    if (hydratedProjectRef.current === projectId) return;
+
+    didHydrateConstraintsRef.current = false;
+    generationStartedForProjectRef.current = null;
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!project || !projectId) return;
+    if (hydratedProjectRef.current === projectId) return;
+
+    setProjectName(project.name);
+    setProjectNameInStore(project.name);
+    setNodes((project.graph?.nodes as any[]) ?? []);
+    setEdges((project.graph?.edges as any[]) ?? []);
+    if (project.constraints) setConstraints(project.constraints as any);
+    else resetConstraints();
+
+    hydratedProjectRef.current = projectId;
+    setHydrated(true);
+  }, [project, projectId, setProjectNameInStore, setNodes, setEdges, setConstraints, resetConstraints]);
+
+  const runArchitectureGeneration = useCallback(async () => {
+    if (!projectId || !project) return;
+
+    setIsGeneratingArchitecture(true);
+    setGenerationError(null);
+    setSaved(false);
+
+    try {
+      await updateGenerationState({
+        projectId: projectId as any,
+        status: "generating",
+      });
+
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: project.description || project.name,
+          constraints: project.constraints ?? constraints,
+          selectedComponentIds: project.selectedComponentIds ?? [],
+          sourceIdeationSnapshot: project.sourceIdeationSnapshot ?? [],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Generation failed (${response.status})`);
+      }
+
+      const data = await response.json();
+      const generatedNodes = Array.isArray(data.nodes) ? data.nodes : [];
+      const generatedEdges = Array.isArray(data.edges) ? data.edges : [];
+
+      if (generatedNodes.length === 0) {
+        throw new Error("Generated architecture returned no nodes");
+      }
+
+      setNodes(generatedNodes as any);
+      setEdges(generatedEdges as any);
+
+      await updateGraph({
+        projectId: projectId as any,
+        graph: {
+          nodes: generatedNodes as any,
+          edges: generatedEdges as any,
+        },
+      });
+
+      const assumptions = Array.isArray(data.assumptions)
+        ? data.assumptions.filter((value: unknown): value is string => typeof value === "string")
+        : undefined;
+
+      const generationPayload: Record<string, unknown> = {
+        projectId: projectId as any,
+        status: "ready",
+        source: typeof data.source === "string" ? data.source : "llm",
+        usedFallback: Boolean(data.usedFallback),
+      };
+      if (typeof data.rationale === "string" && data.rationale.trim().length > 0) {
+        generationPayload.rationale = data.rationale;
+      }
+      if (assumptions && assumptions.length > 0) {
+        generationPayload.assumptions = assumptions;
+      }
+      await updateGenerationState(generationPayload as any);
+
+      setSaved(true);
+    } catch (error) {
+      const selectedIds = Array.isArray(project.selectedComponentIds)
+        ? project.selectedComponentIds.filter(
+            (value: unknown): value is string => typeof value === "string"
+          )
+        : [];
+
+      if (selectedIds.length > 0) {
+        const fallback = buildGraphFromComponentIds(selectedIds);
+        setNodes(fallback.nodes as any);
+        setEdges(fallback.edges as any);
+        await updateGraph({
+          projectId: projectId as any,
+          graph: {
+            nodes: fallback.nodes as any,
+            edges: fallback.edges as any,
+          },
+        });
+        await updateGenerationState({
+          projectId: projectId as any,
+          status: "ready",
+          source: "client_deterministic_scaffold",
+          usedFallback: true,
+          rationale:
+            "Client deterministic scaffold was applied because server generation failed.",
+          assumptions: ["Project was created from selected ideation components."],
+        });
+        setSaved(true);
+      } else {
+        const message =
+          error instanceof Error ? error.message : "Architecture generation failed";
+        setGenerationError(message);
+        await updateGenerationState({
+          projectId: projectId as any,
+          status: "failed",
+          error: message,
+        });
+      }
+    } finally {
+      setIsGeneratingArchitecture(false);
     }
-  }, [project, setNodes, setEdges, setProjectNameInStore]);
+  }, [
+    projectId,
+    project,
+    constraints,
+    setNodes,
+    setEdges,
+    updateGraph,
+    updateGenerationState,
+  ]);
+
+  useEffect(() => {
+    if (!projectId || !project || !hydrated) return;
+
+    const hasPersistedGraph = (project.graph?.nodes?.length ?? 0) > 0;
+    const status = (project.generationStatus ?? (hasPersistedGraph ? "ready" : "pending")) as GenerationStatus;
+    const shouldGenerate =
+      !hasPersistedGraph &&
+      (status === "pending" || status === "generating" || status === "failed");
+
+    if (!shouldGenerate) return;
+    if (generationStartedForProjectRef.current === projectId) return;
+
+    generationStartedForProjectRef.current = projectId;
+    runArchitectureGeneration();
+  }, [projectId, project, hydrated, runArchitectureGeneration]);
 
   const debouncedSaveGraph = useCallback(() => {
-    if (!projectId || !initialHydrationDone.current) return;
+    if (!projectId || !hydrated) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+
     setSaved(false);
     saveTimerRef.current = setTimeout(async () => {
       try {
@@ -78,11 +237,31 @@ export default function ProjectWorkspacePage() {
         // save failed silently
       }
     }, 1500);
-  }, [projectId, nodes, edges, updateGraph]);
+  }, [projectId, hydrated, nodes, edges, updateGraph]);
 
   useEffect(() => {
     if (hydrated) debouncedSaveGraph();
   }, [nodes, edges, hydrated, debouncedSaveGraph]);
+
+  useEffect(() => {
+    if (!hydrated || !projectId) return;
+
+    if (!didHydrateConstraintsRef.current) {
+      didHydrateConstraintsRef.current = true;
+      return;
+    }
+
+    if (constraintsSaveTimerRef.current) clearTimeout(constraintsSaveTimerRef.current);
+
+    constraintsSaveTimerRef.current = setTimeout(() => {
+      updateConstraintsMutation({
+        projectId: projectId as any,
+        constraints: constraints as any,
+      }).catch(() => {
+        // best effort
+      });
+    }, 700);
+  }, [constraints, hydrated, projectId, updateConstraintsMutation]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -107,6 +286,18 @@ export default function ProjectWorkspacePage() {
     }
   }
 
+  const displayConstraints = useMemo(
+    () => [
+      { label: `Traffic: ${constraints.trafficExpectation}`, icon: "📊" },
+      { label: `Budget: ${constraints.budgetLevel}`, icon: "💰" },
+      { label: `Timeline: ${constraints.timeline}`, icon: "⏱️" },
+      { label: `Team: ${constraints.teamSize}`, icon: "👥" },
+      { label: `Regions: ${constraints.regionCount}`, icon: "🌍" },
+      { label: `Uptime: ${constraints.uptimeTarget}%`, icon: "📈" },
+    ],
+    [constraints]
+  );
+
   if (project === undefined) {
     return (
       <div className="flex h-screen items-center justify-center bg-[var(--bg-primary)]">
@@ -126,10 +317,15 @@ export default function ProjectWorkspacePage() {
     );
   }
 
+  const projectStatus = (project.generationStatus ?? "ready") as GenerationStatus;
+  const showGenerationModal =
+    isGeneratingArchitecture ||
+    ((projectStatus === "pending" || projectStatus === "generating") &&
+      nodes.length === 0);
+
   return (
     <ReactFlowProvider>
       <div className="flex flex-col h-screen bg-[var(--bg-primary)]">
-        {/* Top Toolbar */}
         <header className="h-12 flex items-center gap-2 px-3 glass border-b border-[var(--border)] z-20 shrink-0">
           <Link
             href="/projects"
@@ -162,9 +358,17 @@ export default function ProjectWorkspacePage() {
 
           <div className="w-px h-5 bg-[var(--border)] mx-1" />
 
-          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] text-xs font-medium bg-gradient-to-r from-[var(--accent)] to-[var(--secondary)] text-white hover:shadow-[var(--clay-glow)] transition-all">
-            <Sparkles className="w-3.5 h-3.5" />
-            Generate
+          <button
+            onClick={runArchitectureGeneration}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] text-xs font-medium bg-gradient-to-r from-[var(--accent)] to-[var(--secondary)] text-white hover:shadow-[var(--clay-glow)] transition-all disabled:opacity-60"
+            disabled={isGeneratingArchitecture}
+          >
+            {isGeneratingArchitecture ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5" />
+            )}
+            Regenerate
           </button>
           <button
             onClick={() => setRightTab("compare")}
@@ -205,19 +409,15 @@ export default function ProjectWorkspacePage() {
           </span>
         </header>
 
-        {/* Main Content: Left Sidebar | Canvas | Right Panel */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Left Sidebar */}
           <aside className="w-[280px] border-r border-[var(--border)] bg-[var(--bg-secondary)] overflow-y-auto shrink-0">
             <ComponentLibrary />
           </aside>
 
-          {/* Center Canvas */}
           <main className="flex-1 relative">
             <ArchitectureCanvas />
           </main>
 
-          {/* Right Panel */}
           <aside className="w-[360px] border-l border-[var(--border)] bg-[var(--bg-secondary)] overflow-y-auto shrink-0">
             <RightSidebar
               activeTab={rightTab}
@@ -228,25 +428,44 @@ export default function ProjectWorkspacePage() {
           </aside>
         </div>
 
-        {/* Bottom Constraints Bar */}
         <footer className="h-10 flex items-center gap-2 px-4 border-t border-[var(--border)] bg-[var(--bg-secondary)] overflow-x-auto shrink-0">
           <span className="text-xs text-[var(--text-muted)] shrink-0">Constraints:</span>
-          {[
-            { label: `Users: ${project.constraints?.teamSize ?? 1}K`, icon: "👥" },
-            { label: `Traffic: ${project.constraints?.trafficExpectation ?? "Medium"}`, icon: "📊" },
-            { label: `Budget: ${project.constraints?.budgetLevel ?? "Medium"}`, icon: "💰" },
-            { label: `Timeline: ${project.constraints?.timeline ?? "1month"}`, icon: "⏱️" },
-            { label: `Team: ${project.constraints?.teamSize ?? 2}`, icon: "👥" },
-            { label: `Regions: ${project.constraints?.regionCount ?? 1}`, icon: "🌍" },
-            { label: `Uptime: ${project.constraints?.uptimeTarget ?? 99}%`, icon: "📈" },
-            { label: `Priority: MVP Speed`, icon: "🎯" },
-          ].map((c) => (
-            <button key={c.label} className="chip shrink-0">
-              <span>{c.icon}</span>
-              {c.label}
+          {displayConstraints.map((item) => (
+            <button key={item.label} className="chip shrink-0">
+              <span>{item.icon}</span>
+              {item.label}
             </button>
           ))}
         </footer>
+
+        {showGenerationModal && (
+          <div className="absolute inset-0 z-50 bg-black/55 backdrop-blur-sm flex items-center justify-center p-6">
+            <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[var(--bg-secondary)] p-6 shadow-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[var(--accent)]/20 flex items-center justify-center">
+                  <Loader2 className="w-5 h-5 animate-spin text-[var(--accent)]" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                    Generating architecture
+                  </h3>
+                  <p className="text-xs text-[var(--text-secondary)] mt-1">
+                    Building connections and layout for your selected components.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 h-1.5 rounded-full bg-[var(--bg-hover)] overflow-hidden">
+                <div className="h-full w-1/3 bg-gradient-to-r from-[var(--accent)] to-[var(--secondary)] animate-[pulse_1.4s_ease-in-out_infinite]" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {generationError && (
+          <div className="absolute bottom-14 right-4 z-40 rounded-lg bg-red-500/15 border border-red-400/40 text-red-300 px-3 py-2 text-xs">
+            {generationError}
+          </div>
+        )}
       </div>
     </ReactFlowProvider>
   );

@@ -2,6 +2,10 @@ import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
 import { COMPONENT_LIBRARY } from "@/lib/components-data";
 import {
+    FAST_OUTPUT_TOKENS,
+    LOW_REASONING_PROVIDER_OPTIONS,
+} from "@/lib/ai/google-generation";
+import {
     COMPONENT_CATALOG,
     CATEGORY_ORDER,
     CATEGORY_LABELS,
@@ -609,6 +613,8 @@ export async function POST(req: Request) {
             system: systemPrompt,
             prompt: contextBlock,
             temperature: 0.4,
+            maxOutputTokens: FAST_OUTPUT_TOKENS.workspace,
+            providerOptions: LOW_REASONING_PROVIDER_OPTIONS,
         });
 
         const { assistantMessage, actions, updatedScope } = result.object;

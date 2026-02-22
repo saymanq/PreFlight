@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { sendPlanMessage, type IdeationArtifact } from "@/lib/api";
-import { buildGraphFromComponentIds } from "@/lib/generation/graph-builder";
 import { COMPONENT_LIBRARY, getComponentById } from "@/lib/components-data";
 import { buildReportMarkdown, buildReportHtml } from "@/lib/plan-report";
 import {
@@ -21,6 +20,14 @@ import {
 } from "lucide-react";
 
 const ARTIFACT_MARKER_REGEX = /<pf_artifact>([\s\S]*?)<\/pf_artifact>/i;
+const COMPONENTS_MARKER_REGEX = /<pf_components>([\s\S]*?)<\/pf_components>/i;
+const GENERATION_MARKER_REGEX = /<pf_generation>([\s\S]*?)<\/pf_generation>/i;
+
+interface GenerationMarker {
+  projectId: string;
+  componentIds: string[];
+  createdAt: number;
+}
 
 const QUICK_ACTIONS = [
   { icon: "⚡", label: "SaaS App", prompt: "I want to build a SaaS application" },
@@ -35,7 +42,13 @@ function stripComponentIdsLine(text: string): string {
 }
 
 function stripHiddenContent(text: string): string {
-  return stripComponentIdsLine(text.replace(/<pf_artifact>[\s\S]*?<\/pf_artifact>/gi, "").trim());
+  return stripComponentIdsLine(
+    text
+      .replace(/<pf_artifact>[\s\S]*?<\/pf_artifact>/gi, "")
+      .replace(/<pf_components>[\s\S]*?<\/pf_components>/gi, "")
+      .replace(/<pf_generation>[\s\S]*?<\/pf_generation>/gi, "")
+      .trim()
+  );
 }
 
 function parseArtifactFromText(text: string): IdeationArtifact | null {
@@ -54,6 +67,83 @@ function attachArtifactToText(text: string, artifact: IdeationArtifact | null): 
   if (!artifact) return text;
   const payload = encodeURIComponent(JSON.stringify(artifact));
   return `${text}\n<pf_artifact>${payload}</pf_artifact>`;
+}
+
+function normalizeComponentIds(componentIds: string[]): string[] {
+  return componentIds
+    .map((id) => id.trim())
+    .filter((id, index, all) => id.length > 0 && all.indexOf(id) === index)
+    .filter((id) => Boolean(getComponentById(id)));
+}
+
+function parseComponentIdsFromText(text: string): string[] {
+  const match = text.match(COMPONENTS_MARKER_REGEX);
+  if (!match?.[1]) return [];
+  try {
+    const decoded = decodeURIComponent(match[1]);
+    if (decoded.startsWith("[") || decoded.startsWith("{")) {
+      const parsed = JSON.parse(decoded);
+      if (Array.isArray(parsed)) {
+        return normalizeComponentIds(parsed.map((value) => String(value)));
+      }
+    }
+    return normalizeComponentIds(decoded.split(","));
+  } catch {
+    return normalizeComponentIds(match[1].split(","));
+  }
+}
+
+function attachComponentIdsToText(text: string, componentIds: string[]): string {
+  const normalized = normalizeComponentIds(componentIds);
+  if (normalized.length === 0) return text;
+  const payload = encodeURIComponent(normalized.join(","));
+  return `${text}\n<pf_components>${payload}</pf_components>`;
+}
+
+function parseGenerationFromText(text: string): GenerationMarker | null {
+  const match = text.match(GENERATION_MARKER_REGEX);
+  if (!match?.[1]) return null;
+  try {
+    const decoded = decodeURIComponent(match[1]);
+    const parsed = JSON.parse(decoded) as Partial<GenerationMarker>;
+    if (!parsed.projectId) return null;
+    return {
+      projectId: String(parsed.projectId),
+      componentIds: normalizeComponentIds((parsed.componentIds ?? []).map((id) => String(id))),
+      createdAt: Number(parsed.createdAt) || Date.now(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function attachGenerationToText(text: string, generation: GenerationMarker): string {
+  const payload = encodeURIComponent(JSON.stringify(generation));
+  return `${text}\n<pf_generation>${payload}</pf_generation>`;
+}
+
+function findLatestSuggestedComponents(
+  messages: { role: "user" | "assistant"; content: string }[]
+): { ids: string[]; index: number } | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i];
+    if (msg.role !== "assistant") continue;
+    const ids = parseComponentIdsFromText(msg.content);
+    if (ids.length > 0) return { ids, index: i };
+  }
+  return null;
+}
+
+function findLatestGeneration(
+  messages: { role: "user" | "assistant"; content: string }[]
+): { data: GenerationMarker; index: number } | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i];
+    if (msg.role !== "assistant") continue;
+    const generation = parseGenerationFromText(msg.content);
+    if (generation) return { data: generation, index: i };
+  }
+  return null;
 }
 
 function getCategoryForComponent(componentId: string): string {
@@ -216,6 +306,60 @@ function stageLabel(stage: IdeationArtifact["stage"] | undefined): string {
   return "Ideation";
 }
 
+function normalizeBudgetLevel(value: string | undefined): "low" | "medium" | "high" {
+  const normalized = value?.toLowerCase().trim();
+  if (normalized === "low") return "low";
+  if (normalized === "high") return "high";
+  return "medium";
+}
+
+function normalizeTimeline(value: string | undefined): "hackathon" | "1month" | "3months" | "production" {
+  const normalized = value?.toLowerCase().replace(/\s+/g, "");
+  if (!normalized) return "1month";
+  if (normalized.includes("hackathon")) return "hackathon";
+  if (normalized.includes("production")) return "production";
+  if (normalized.includes("3month") || normalized.includes("quarter")) return "3months";
+  return "1month";
+}
+
+function normalizeTraffic(value: string | undefined): "low" | "medium" | "high" | "very_high" {
+  const normalized = value?.toLowerCase().trim();
+  if (normalized === "low") return "low";
+  if (normalized === "high") return "high";
+  if (normalized === "very_high" || normalized === "very high") return "very_high";
+  return "medium";
+}
+
+function normalizeSensitivity(value: string | undefined): "low" | "medium" | "high" {
+  const normalized = value?.toLowerCase().trim();
+  if (normalized === "low") return "low";
+  if (normalized === "high") return "high";
+  return "medium";
+}
+
+function normalizeDevGoal(value: string | undefined): "mvp_speed" | "balanced" | "scale_ready" {
+  const normalized = value?.toLowerCase().replace(/\s+/g, "_").trim();
+  if (normalized === "mvp_speed" || normalized === "fastest_mvp") return "mvp_speed";
+  if (normalized === "scale_ready") return "scale_ready";
+  return "balanced";
+}
+
+function mapArtifactToProjectConstraints(artifact: IdeationArtifact | null) {
+  return {
+    budgetLevel: normalizeBudgetLevel(artifact?.constraints?.budgetLevel),
+    teamSize: Math.max(1, Math.min(200, Number(artifact?.constraints?.teamSize) || 2)),
+    timeline: normalizeTimeline(artifact?.constraints?.timeline),
+    trafficExpectation: normalizeTraffic(artifact?.constraints?.trafficExpectation),
+    dataVolume: "medium" as const,
+    uptimeTarget: Math.max(90, Math.min(99.99, Number(artifact?.constraints?.uptimeTarget) || 99)),
+    regionCount: Math.max(1, Math.min(12, Number(artifact?.constraints?.regionCount) || 1)),
+    devExperienceGoal: normalizeDevGoal(artifact?.constraints?.devExperienceGoal),
+    dataSensitivity: normalizeSensitivity(artifact?.constraints?.dataSensitivity),
+    preferredProviders: [] as string[],
+    avoidProviders: [] as string[],
+  };
+}
+
 function ArtifactPanel({ artifact }: { artifact: IdeationArtifact }) {
   const confidencePercent = Math.round(Math.max(0, Math.min(1, artifact.confidence ?? 0)) * 100);
 
@@ -300,6 +444,7 @@ export default function PlanningChat() {
   const [artifact, setArtifact] = useState<IdeationArtifact | null>(null);
   const [suggestedIds, setSuggestedIds] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [latestGeneration, setLatestGeneration] = useState<GenerationMarker | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -329,6 +474,9 @@ export default function PlanningChat() {
         setMessages([]);
       }
       setArtifact(null);
+      setSuggestedIds([]);
+      setSelectedIds([]);
+      setLatestGeneration(null);
       syncedThreadRef.current = null;
       return;
     }
@@ -347,14 +495,26 @@ export default function PlanningChat() {
     }));
     setMessages(hydratedMessages);
 
-    const latestArtifact = [...(activeThread.messages ?? [])]
+    const rawMessages = (activeThread.messages ?? []).map((msg) => ({
+      role: msg.role as "user" | "assistant",
+      content: msg.content,
+    }));
+
+    const latestArtifact = [...rawMessages]
       .reverse()
       .map((msg) => parseArtifactFromText(msg.content))
       .find((value) => value !== null) ?? null;
     setArtifact(latestArtifact);
 
-    setSuggestedIds([]);
-    setSelectedIds([]);
+    const latestSuggestion = findLatestSuggestedComponents(rawMessages);
+    const latestGenerationMarker = findLatestGeneration(rawMessages);
+    const shouldShowSuggestions =
+      latestSuggestion &&
+      (!latestGenerationMarker || latestSuggestion.index > latestGenerationMarker.index);
+
+    setLatestGeneration(latestGenerationMarker?.data ?? null);
+    setSuggestedIds(shouldShowSuggestions ? latestSuggestion.ids : []);
+    setSelectedIds(shouldShowSuggestions ? latestSuggestion.ids : []);
     setError(null);
   }, [activeThread, threadId]);
 
@@ -377,6 +537,7 @@ export default function PlanningChat() {
     setArtifact(null);
     setSuggestedIds([]);
     setSelectedIds([]);
+    setLatestGeneration(null);
     setInput("");
   };
 
@@ -395,6 +556,7 @@ export default function PlanningChat() {
         setArtifact(null);
         setSuggestedIds([]);
         setSelectedIds([]);
+        setLatestGeneration(null);
       }
     } catch {
       // best effort
@@ -425,18 +587,23 @@ export default function PlanningChat() {
       const response = await sendPlanMessage(nextMessages);
       const assistantText = stripHiddenContent(response.message || response.assistantMessage || "");
       const artifactFromResponse = response.artifact ?? null;
-      const componentIds =
-        response.suggested_component_ids ?? response.suggestedComponentIds ?? [];
+      const componentIds = normalizeComponentIds(
+        (response.suggested_component_ids ?? response.suggestedComponentIds ?? []).map((id) =>
+          String(id)
+        )
+      );
 
       const fullHistory = [...nextMessages, { role: "assistant" as const, content: assistantText }];
       setMessages(fullHistory);
       setArtifact(artifactFromResponse);
 
       try {
+        let persistedAssistantContent = attachArtifactToText(assistantText, artifactFromResponse);
+        persistedAssistantContent = attachComponentIdsToText(persistedAssistantContent, componentIds);
         await appendMessage({
           threadId: ensuredThreadId as any,
           role: "assistant",
-          content: attachArtifactToText(assistantText, artifactFromResponse),
+          content: persistedAssistantContent,
         });
       } catch (persistError) {
         console.error("Failed to persist assistant ideation message:", persistError);
@@ -448,8 +615,10 @@ export default function PlanningChat() {
       if (componentIds.length > 0) {
         setSuggestedIds(componentIds);
         setSelectedIds(componentIds);
+        setLatestGeneration(null);
       } else {
         setSuggestedIds([]);
+        setSelectedIds([]);
       }
     } catch (cause) {
       const msg = cause instanceof Error ? cause.message : "Something went wrong";
@@ -478,21 +647,48 @@ export default function PlanningChat() {
 
     try {
       const ensuredThreadId = await ensureThread();
-      const { nodes, edges } = buildGraphFromComponentIds(selectedIds);
+      const description = messages.length
+        ? stripComponentIdsLine(messages[messages.length - 1]?.content || "").slice(0, 200)
+        : "";
 
-      const projectId = await createProjectFromIdeation({
+      const payload: Record<string, unknown> = {
         threadId: ensuredThreadId as any,
         selectedComponentIds: selectedIds,
-        graph: { nodes, edges },
         name: activeThread?.title || "My Architecture",
-        description: messages.length
-          ? stripComponentIdsLine(messages[messages.length - 1]?.content || "").slice(0, 200)
-          : undefined,
-      });
+        constraints: mapArtifactToProjectConstraints(artifact) as any,
+      };
+      if (description.trim().length > 0) {
+        payload.description = description;
+      }
+
+      const projectId = await createProjectFromIdeation(payload as any);
 
       await createWorkspaceThreadForProject({
         projectId: projectId as any,
       });
+
+      const selectedNames = selectedIds.map((id) => getComponentById(id)?.name ?? id);
+      const summaryText = `Architecture generated for this idea.\n\nTools selected:\n${selectedNames
+        .map((name) => `- ${name}`)
+        .join("\n")}`;
+      const generationMarker: GenerationMarker = {
+        projectId: String(projectId),
+        componentIds: selectedIds,
+        createdAt: Date.now(),
+      };
+
+      try {
+        let persistedSummary = attachComponentIdsToText(summaryText, selectedIds);
+        persistedSummary = attachGenerationToText(persistedSummary, generationMarker);
+        await appendMessage({
+          threadId: ensuredThreadId as any,
+          role: "assistant",
+          content: persistedSummary,
+        });
+        setLatestGeneration(generationMarker);
+      } catch {
+        // best effort
+      }
 
       window.location.href = `/project/${projectId}`;
     } catch (cause) {
@@ -539,6 +735,13 @@ export default function PlanningChat() {
     showComponentCards &&
     selectedIds.length > 0 &&
     (artifact ? artifact.readyForArchitecture : true);
+  const latestGeneratedComponentNames = useMemo(
+    () =>
+      (latestGeneration?.componentIds ?? []).map(
+        (componentId) => getComponentById(componentId)?.name ?? componentId
+      ),
+    [latestGeneration]
+  );
 
   function sessionPreview(msgs: { role: string; content: string }[]) {
     const first = msgs.find((msg) => msg.role === "user");
@@ -698,6 +901,28 @@ export default function PlanningChat() {
               <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 py-6 max-w-[720px] w-full mx-auto">
                 <div className="flex flex-col gap-6">
                   {artifact && <ArtifactPanel artifact={artifact} />}
+                  {latestGeneration && (
+                    <div
+                      className="rounded-2xl border border-[var(--plan-border)] bg-[var(--plan-bg-card)] p-4"
+                      style={{ boxShadow: "0 1px 2px rgba(0,0,0,0.3)" }}
+                    >
+                      <p className="text-sm font-semibold text-[var(--plan-text)]">
+                        Architecture generated
+                      </p>
+                      {latestGeneratedComponentNames.length > 0 && (
+                        <p className="mt-1 text-xs text-[var(--plan-text-secondary)]">
+                          Tools used: {latestGeneratedComponentNames.join(", ")}
+                        </p>
+                      )}
+                      <Link
+                        href={`/project/${latestGeneration.projectId}`}
+                        className="mt-2 inline-flex items-center gap-1 text-xs text-[var(--plan-accent)] hover:underline"
+                      >
+                        Open generated project
+                        <ArrowRight className="w-3 h-3" />
+                      </Link>
+                    </div>
+                  )}
                   {messages.map((msg, index) => (
                     <MessageBubble
                       key={index}

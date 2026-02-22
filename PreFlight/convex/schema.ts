@@ -37,6 +37,21 @@ export default defineSchema({
     ownerId: v.optional(v.id("users")),
     name: v.string(),
     description: v.optional(v.string()),
+    generationStatus: v.optional(v.union(
+      v.literal("pending"),
+      v.literal("generating"),
+      v.literal("ready"),
+      v.literal("failed")
+    )),
+    generationError: v.optional(v.string()),
+    generationStartedAt: v.optional(v.number()),
+    generationCompletedAt: v.optional(v.number()),
+    generationMeta: v.optional(v.object({
+      source: v.optional(v.string()),
+      usedFallback: v.optional(v.boolean()),
+      rationale: v.optional(v.string()),
+      assumptions: v.optional(v.array(v.string())),
+    })),
     constraints: v.optional(v.object({
       budgetLevel: v.string(),
       teamSize: v.number(),

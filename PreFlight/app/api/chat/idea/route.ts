@@ -5,6 +5,10 @@ import {
     CATEGORY_LABELS,
     getComponentsByCategory,
 } from "@/lib/component-catalog";
+import {
+    FAST_OUTPUT_TOKENS,
+    LOW_REASONING_PROVIDER_OPTIONS,
+} from "@/lib/ai/google-generation";
 
 const CATALOG_CONTEXT = CATEGORY_ORDER.map((category) => {
     const examples = getComponentsByCategory(category)
@@ -86,7 +90,8 @@ export async function POST(req: Request) {
             model: google("gemini-3-flash-preview"),
             system: SYSTEM_PROMPT,
             temperature: 0.4,
-            maxOutputTokens: 1500,
+            maxOutputTokens: FAST_OUTPUT_TOKENS.ideaStream,
+            providerOptions: LOW_REASONING_PROVIDER_OPTIONS,
             messages: messages.map((m: { role: string; content: string }) => ({
                 role: m.role as "user" | "assistant",
                 content: m.content,

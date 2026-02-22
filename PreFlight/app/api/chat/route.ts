@@ -8,6 +8,10 @@ import {
     type ComponentCategory,
 } from "@/lib/component-catalog";
 import { ALL_COMPONENTS } from "@/lib/scoring/component-weights";
+import {
+    FAST_OUTPUT_TOKENS,
+    LOW_REASONING_PROVIDER_OPTIONS,
+} from "@/lib/ai/google-generation";
 
 const META_BY_KEY = new Map(ALL_COMPONENTS.map((m) => [m.key, m]));
 
@@ -201,6 +205,8 @@ ${CATALOG_BLOCK}`;
         const result = streamText({
             model: google("gemini-3-flash-preview"),
             system: systemPrompt,
+            maxOutputTokens: FAST_OUTPUT_TOKENS.chatStream,
+            providerOptions: LOW_REASONING_PROVIDER_OPTIONS,
             messages: messages.map((m: { role: string; content: string }) => ({
                 role: m.role as "user" | "assistant",
                 content: m.content,
