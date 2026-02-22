@@ -87,15 +87,15 @@ Shift-left cost intelligence directly in your editor.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     PreFlight Platform                       │
+│                     PreFlight Platform                      │
 ├──────────────────────┬──────────────────────────────────────┤
 │   VS Code Extension  │         Web Architecture Studio      │
-│   ┌───────────────┐  │  ┌────────────┐    ┌──────────────┐ │
-│   │ AST Parser    │  │  │ Next.js    │    │ FastAPI      │ │
-│   │ Cost Engine   │  │  │ React Flow │    │ Gemini AI    │ │
-│   │ CodeLens      │  │  │ Zustand    │    │ RAG Engine   │ │
-│   │ Gemini AI     │  │  │ Convex     │    │ Cost Engine  │ │
-│   └───────────────┘  │  └────────────┘    └──────────────┘ │
+│   ┌───────────────┐  │  ┌────────────┐    ┌──────────────┐  │
+│   │ AST Parser    │  │  │ Next.js    │    │ FastAPI      │  │
+│   │ Cost Engine   │  │  │ React Flow │    │ Gemini AI    │  │
+│   │ CodeLens      │  │  │ Zustand    │    │ RAG Engine   │  │
+│   │ Gemini AI     │  │  │ Convex     │    │ Cost Engine  │  │
+│   └───────────────┘  │  └────────────┘    └──────────────┘  │
 └──────────────────────┴──────────────────────────────────────┘
 ```
 
