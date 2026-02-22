@@ -450,12 +450,6 @@ export default function PlanningChat() {
   );
 
   useEffect(() => {
-    if (!threadId && threads.length > 0) {
-      setThreadId(String(threads[0]._id));
-    }
-  }, [threads, threadId]);
-
-  useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
 
@@ -518,12 +512,10 @@ export default function PlanningChat() {
     return id;
   }
 
-  const startNewChat = async () => {
+  const startNewChat = () => {
     setError(null);
-    const created = await createThread({});
-    const id = String(created);
-    setThreadId(id);
-    syncedThreadRef.current = id;
+    setThreadId(null);
+    syncedThreadRef.current = null;
     setMessages([]);
     setArtifact(null);
     setSuggestedIds([]);
@@ -805,12 +797,12 @@ export default function PlanningChat() {
             >
               {sidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
             </button>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm text-[var(--plan-text-inverse)] bg-gradient-to-br from-[var(--plan-accent)] to-[#8a6d2b]" style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}>
-              P
+            <div className="h-9 px-2.5 rounded-xl border border-white/[0.1] bg-white/[0.04] flex items-center gap-2">
+              <img src="/preflight-logo.png" alt="PreFlight" className="h-5 w-auto object-contain" />
+              <span className="text-sm font-semibold tracking-wide text-white/85">
+                Preflight
+              </span>
             </div>
-            <span className="text-lg font-semibold tracking-tight" style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}>
-              preflight
-            </span>
           </div>
           <div className="flex items-center gap-2">
             <div className="relative">
@@ -857,7 +849,7 @@ export default function PlanningChat() {
 
         <div className="flex-1 flex flex-col min-h-0 min-w-0">
           {!started ? (
-            <div className="flex-1 flex flex-col items-center justify-center gap-10 px-6">
+            <div className="flex-1 flex flex-col items-center justify-center gap-8 px-6">
               <div className="text-center">
                 <div className="flex items-center justify-center mb-5">
                   <img src="/preflight-logo.png" alt="PreFlight" className="h-24 w-auto object-contain" />
@@ -881,18 +873,40 @@ export default function PlanningChat() {
                   </button>
                 ))}
               </div>
+              <div className="w-full max-w-[720px]">
+                <div className="rounded-3xl border border-white/[0.12] bg-white/[0.04] p-2.5 backdrop-blur-md shadow-[0_14px_50px_rgba(0,0,0,0.45)]">
+                  <textarea
+                    value={input}
+                    onChange={(event) => setInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        send(input);
+                      }
+                    }}
+                    placeholder="Describe what you want to build..."
+                    rows={2}
+                    className="w-full bg-transparent border-none outline-none resize-none text-white text-sm leading-relaxed py-3 px-3 placeholder:text-white/35"
+                    style={{ fontFamily: "'DM Sans', sans-serif" }}
+                  />
+                  <div className="flex justify-between items-center px-2 pb-1">
+                    <span className="text-[11px] text-[var(--plan-text-muted)] px-2 py-1 rounded-md bg-[var(--plan-bg-chip)]">
+                      Azure GPT-5.2
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => send(input)}
+                      disabled={!input.trim() || loading}
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-default bg-white/[0.08] text-white/50 enabled:bg-white enabled:text-black enabled:hover:bg-white/90"
+                    >
+                      ↑
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           ) : (
             <>
-              <div className="flex items-center h-11 px-5 border-b border-white/[0.06] shrink-0">
-                <span className="text-[13px] font-medium text-white/80">
-                  {threadId ? "Architecture Chat" : "New Architecture"}
-                </span>
-                <span className="ml-2 text-[11px] text-white/30 px-2 py-0.5 rounded-md bg-white/[0.04]">
-                  Planning
-                </span>
-              </div>
-
               <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 py-6 max-w-[720px] w-full mx-auto">
                 <div className="flex flex-col gap-6">
                   {artifact && <ArtifactPanel artifact={artifact} />}
@@ -955,39 +969,41 @@ export default function PlanningChat() {
             </>
           )}
 
-          <div className={`shrink-0 ${started ? "px-6 pb-5 pt-2" : "px-6 pb-12"}`}>
-            <div className="max-w-[680px] w-full mx-auto">
-              <div className="rounded-2xl border border-white/[0.1] bg-white/[0.03] p-1.5 focus-within:border-white/[0.2] transition-colors backdrop-blur-sm">
-                <textarea
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      send(input);
-                    }
-                  }}
-                  placeholder={started ? "Continue the conversation..." : "How can I help you today?"}
-                  rows={started ? 1 : 2}
-                  className="w-full bg-transparent border-none outline-none resize-none text-white text-sm leading-relaxed py-2.5 px-3 placeholder:text-white/30"
-                  style={{ fontFamily: "'DM Sans', sans-serif" }}
-                />
-                <div className="flex justify-between items-center px-2 pb-1">
-                  <span className="text-[11px] text-[var(--plan-text-muted)] px-2 py-1 rounded-md bg-[var(--plan-bg-chip)]">
-                    Azure GPT-5.2
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => send(input)}
-                    disabled={!input.trim() || loading}
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-default bg-white/[0.06] text-white/40 enabled:bg-white enabled:text-black enabled:hover:bg-white/90"
-                  >
-                    ↑
-                  </button>
+          {started && (
+            <div className="shrink-0 px-6 pb-5 pt-2">
+              <div className="max-w-[680px] w-full mx-auto">
+                <div className="rounded-2xl border border-white/[0.1] bg-white/[0.03] p-1.5 focus-within:border-white/[0.2] transition-colors backdrop-blur-sm">
+                  <textarea
+                    value={input}
+                    onChange={(event) => setInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        send(input);
+                      }
+                    }}
+                    placeholder="Continue the conversation..."
+                    rows={1}
+                    className="w-full bg-transparent border-none outline-none resize-none text-white text-sm leading-relaxed py-2.5 px-3 placeholder:text-white/30"
+                    style={{ fontFamily: "'DM Sans', sans-serif" }}
+                  />
+                  <div className="flex justify-between items-center px-2 pb-1">
+                    <span className="text-[11px] text-[var(--plan-text-muted)] px-2 py-1 rounded-md bg-[var(--plan-bg-chip)]">
+                      Azure GPT-5.2
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => send(input)}
+                      disabled={!input.trim() || loading}
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-default bg-white/[0.06] text-white/40 enabled:bg-white enabled:text-black enabled:hover:bg-white/90"
+                    >
+                      ↑
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
