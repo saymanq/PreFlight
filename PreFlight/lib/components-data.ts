@@ -1,10 +1,12 @@
+import { ALL_COMPONENTS, type ComponentMeta } from "./scoring/component-weights";
+
 export interface ComponentDefinition {
     id: string;
     name: string;
-    icon: string; // URL to logo image or emoji fallback
+    icon: string;
     color: string;
     description?: string;
-    baseCost?: number; // Approximate base monthly cost in USD (very rough)
+    baseCost?: number;
 }
 
 export interface ComponentCategory {
@@ -14,181 +16,185 @@ export interface ComponentCategory {
     components: ComponentDefinition[];
 }
 
-// Helper to get logo URL from simple-icons
-const logo = (name: string, color?: string) =>
-    `https://cdn.simpleicons.org/${name}${color ? `/${color.replace('#', '')}` : ''}`;
+const logo = (slug: string) =>
+    `https://cdn.simpleicons.org/${slug}`;
 
-export const COMPONENT_LIBRARY: ComponentCategory[] = [
-    {
-        id: "backend",
-        name: "Backend",
-        icon: "server",
-        components: [
-            { id: "fastapi", name: "FastAPI", icon: logo("fastapi"), color: "#009688", baseCost: 0 },
-            { id: "express", name: "Express", icon: logo("express"), color: "#000000", baseCost: 0 },
-            { id: "nodejs", name: "Node.js", icon: logo("nodedotjs"), color: "#339933", baseCost: 0 },
-            { id: "django", name: "Django", icon: logo("django"), color: "#092e20", baseCost: 0 },
-            { id: "flask", name: "Flask", icon: logo("flask"), color: "#000000", baseCost: 0 },
-            { id: "spring", name: "Spring Boot", icon: logo("spring"), color: "#6db33f", baseCost: 0 },
-            { id: "nestjs", name: "NestJS", icon: logo("nestjs"), color: "#e0234e", baseCost: 0 },
-            { id: "go", name: "Go/Gin", icon: logo("go"), color: "#00add8", baseCost: 0 },
-        ],
-    },
-    {
-        id: "frontend",
-        name: "Frontend",
-        icon: "palette",
-        components: [
-            { id: "react", name: "React", icon: logo("react"), color: "#61dafb", baseCost: 0 },
-            { id: "nextjs", name: "Next.js", icon: logo("nextdotjs"), color: "#000000", baseCost: 0 },
-            { id: "vue", name: "Vue", icon: logo("vuedotjs"), color: "#42b883", baseCost: 0 },
-            { id: "svelte", name: "Svelte", icon: logo("svelte"), color: "#ff3e00", baseCost: 0 },
-            { id: "angular", name: "Angular", icon: logo("angular"), color: "#dd0031", baseCost: 0 },
-            { id: "solid", name: "Solid.js", icon: logo("solid"), color: "#2c4f7c", baseCost: 0 },
-            { id: "astro", name: "Astro", icon: logo("astro"), color: "#ff5d01", baseCost: 0 },
-        ],
-    },
-    {
-        id: "database",
-        name: "Database",
-        icon: "database",
-        components: [
-            // You asked to keep PostgreSQL free
-            { id: "postgresql", name: "PostgreSQL", icon: logo("postgresql"), color: "#336791", baseCost: 0 },
-            // MySQL, MongoDB etc. are OSS but managed services have usage-based pricing;
-            // leave 0 to mean "license-free, infra/managed cost varies".
-            { id: "mysql", name: "MySQL", icon: logo("mysql"), color: "#4479a1", baseCost: 0 },
-            { id: "mongodb", name: "MongoDB", icon: logo("mongodb"), color: "#47a248", baseCost: 0 },
-            { id: "supabase", name: "Supabase", icon: logo("supabase"), color: "#3ecf8e", baseCost: 0 },
-            { id: "firebase", name: "Firebase", icon: logo("firebase"), color: "#ffca28", baseCost: 0 },
-            { id: "redis", name: "Redis", icon: logo("redis"), color: "#dc382d", baseCost: 0 },
-            { id: "amazondynamodb", name: "DynamoDB", icon: logo("amazondynamodb"), color: "#4053d6", baseCost: 0 },
-            { id: "planetscale", name: "PlanetScale", icon: logo("planetscale"), color: "#000000", baseCost: 0 },
-        ],
-    },
-    {
-        id: "hosting",
-        name: "Hosting",
-        icon: "cloud",
-        components: [
-            // Vercel Pro starts around $20/month per seat; Hobby is free.[web:33][web:38]
-            { id: "vercel", name: "Vercel", icon: logo("vercel"), color: "#000000", baseCost: 20 },
-            // Netlify Pro is in a similar tens-of-dollars range; exact depends on seats/sites.[web:8]
-            { id: "netlify", name: "Netlify", icon: logo("netlify"), color: "#00c7b7", baseCost: 19 },
-            // Cloud VMs are pay‑per‑hour; keep as rough ballparks for a small instance.
-            { id: "aws-ec2", name: "AWS EC2", icon: logo("amazonec2"), color: "#ff9900", baseCost: 30 },
-            { id: "gcp-compute", name: "GCP Compute", icon: logo("googlecloud"), color: "#4285f4", baseCost: 28 },
-            { id: "azure-vm", name: "Azure VM", icon: logo("microsoftazure"), color: "#0078d4", baseCost: 32 },
-            // Railway and Render have low entry paid tiers (~$5–$7) plus free tiers.[web:35][web:8]
-            { id: "railway", name: "Railway", icon: logo("railway"), color: "#0b0d0e", baseCost: 5 },
-            { id: "render", name: "Render", icon: logo("render"), color: "#46e3b7", baseCost: 7 },
-            { id: "cloudrun", name: "Cloud Run", icon: logo("googlecloud"), color: "#4285f4", baseCost: 0 },
-        ],
-    },
-    {
-        id: "ml",
-        name: "ML/AI",
-        icon: "brain",
-        components: [
-            // Libraries themselves are free; cost is GPU/infra.
-            { id: "tensorflow", name: "TensorFlow", icon: logo("tensorflow"), color: "#ff6f00", baseCost: 0 },
-            { id: "pytorch", name: "PyTorch", icon: logo("pytorch"), color: "#ee4c2c", baseCost: 0 },
-            { id: "opencv", name: "OpenCV", icon: logo("opencv"), color: "#5c3ee8", baseCost: 0 },
-            { id: "scikitlearn", name: "Scikit-learn", icon: logo("scikitlearn"), color: "#f7931e", baseCost: 0 },
-            // Hugging Face has free and paid tiers; keep small non-zero to indicate likely SaaS spend.
-            { id: "huggingface", name: "Hugging Face", icon: "🤗", color: "#ffcc00", baseCost: 9 },
-            // OpenAI/Anthropic are usage‑based per token; this is a placeholder for “small project” spend.[web:19][web:8]
-            { id: "openai", name: "OpenAI API", icon: logo("openai"), color: "#10a37f", baseCost: 50 },
-            { id: "anthropic", name: "Anthropic", icon: logo("anthropic"), color: "#d4a574", baseCost: 50 },
-        ],
-    },
-    {
-        id: "auth",
-        name: "Authentication",
-        icon: "lock",
-        components: [
-            // Auth0 Essentials starts ≈$35/month; using that as base.[web:32][web:34][web:37]
-            { id: "auth0", name: "Auth0", icon: logo("auth0"), color: "#eb5424", baseCost: 35 },
-            { id: "clerk", name: "Clerk", icon: logo("clerk"), color: "#6c47ff", baseCost: 25 },
-            { id: "firebase-auth", name: "Firebase Auth", icon: logo("firebase"), color: "#ffca28", baseCost: 0 },
-            { id: "supabase-auth", name: "Supabase Auth", icon: logo("supabase"), color: "#3ecf8e", baseCost: 0 },
-            { id: "jwt", name: "Custom JWT", icon: logo("jsonwebtokens"), color: "#000000", baseCost: 0 },
-            { id: "nextauth", name: "NextAuth.js", icon: logo("nextdotjs"), color: "#000000", baseCost: 0 },
-            { id: "cognito", name: "AWS Cognito", icon: logo("amazonaws"), color: "#ff9900", baseCost: 0 },
-        ],
-    },
-    {
-        id: "cache",
-        name: "Caching",
-        icon: "zap",
-        components: [
-            { id: "redis-cache", name: "Redis", icon: logo("redis"), color: "#dc382d", baseCost: 0 },
-            { id: "memcached", name: "Memcached", icon: logo("memcached"), color: "#000000", baseCost: 0 },
-            { id: "cloudflare-cdn", name: "Cloudflare", icon: logo("cloudflare"), color: "#f38020", baseCost: 0 },
-            { id: "cloudfront", name: "CloudFront", icon: logo("amazonaws"), color: "#ff9900", baseCost: 0 },
-            { id: "varnish", name: "Varnish", icon: logo("varnish"), color: "#000000", baseCost: 0 },
-        ],
-    },
-    {
-        id: "queue",
-        name: "Message Queue",
-        icon: "mail",
-        components: [
-            { id: "rabbitmq", name: "RabbitMQ", icon: logo("rabbitmq"), color: "#ff6600", baseCost: 0 },
-            { id: "kafka", name: "Apache Kafka", icon: logo("apachekafka"), color: "#000000", baseCost: 0 },
-            { id: "sqs", name: "AWS SQS", icon: logo("amazonsqs"), color: "#ff9900", baseCost: 0 },
-            { id: "redis-pubsub", name: "Redis Pub/Sub", icon: logo("redis"), color: "#dc382d", baseCost: 0 },
-            { id: "pubsub", name: "Google Pub/Sub", icon: logo("googlecloud"), color: "#4285f4", baseCost: 0 },
-        ],
-    },
-    {
-        id: "storage",
-        name: "Storage",
-        icon: "package",
-        components: [
-            { id: "s3", name: "AWS S3", icon: logo("amazons3"), color: "#ff9900", baseCost: 0 },
-            { id: "gcs", name: "Google Cloud Storage", icon: logo("googlecloud"), color: "#4285f4", baseCost: 0 },
-            { id: "azure-blob", name: "Azure Blob", icon: logo("microsoftazure"), color: "#0078d4", baseCost: 0 },
-            { id: "cloudflare-r2", name: "Cloudflare R2", icon: logo("cloudflare"), color: "#f38020", baseCost: 0 },
-            { id: "supabase-storage", name: "Supabase Storage", icon: logo("supabase"), color: "#3ecf8e", baseCost: 0 },
-        ],
-    },
-    {
-        id: "cicd",
-        name: "CI/CD",
-        icon: "refresh-cw",
-        components: [
-            { id: "github-actions", name: "GitHub Actions", icon: logo("githubactions"), color: "#2088ff", baseCost: 0 },
-            { id: "gitlab-ci", name: "GitLab CI", icon: logo("gitlab"), color: "#fc6d26", baseCost: 0 },
-            { id: "circleci", name: "CircleCI", icon: logo("circleci"), color: "#343434", baseCost: 0 },
-            { id: "jenkins", name: "Jenkins", icon: logo("jenkins"), color: "#d24939", baseCost: 0 },
-            { id: "vercel-deploy", name: "Vercel Deploy", icon: logo("vercel"), color: "#000000", baseCost: 0 },
-        ],
-    },
-    {
-        id: "monitoring",
-        name: "Monitoring",
-        icon: "activity",
-        components: [
-            { id: "sentry", name: "Sentry", icon: logo("sentry"), color: "#362d59", baseCost: 0 },
-            { id: "datadog", name: "DataDog", icon: logo("datadog"), color: "#632ca6", baseCost: 0 },
-            { id: "newrelic", name: "New Relic", icon: logo("newrelic"), color: "#008c99", baseCost: 0 },
-            { id: "prometheus", name: "Prometheus", icon: logo("prometheus"), color: "#e6522c", baseCost: 0 },
-            { id: "logrocket", name: "LogRocket", icon: logo("logrocket"), color: "#764abc", baseCost: 0 },
-        ],
-    },
-    {
-        id: "search",
-        name: "Search",
-        icon: "search",
-        components: [
-            { id: "elasticsearch", name: "Elasticsearch", icon: logo("elasticsearch"), color: "#005571", baseCost: 0 },
-            { id: "algolia", name: "Algolia", icon: logo("algolia"), color: "#5468ff", baseCost: 0 },
-            { id: "meilisearch", name: "Meilisearch", icon: logo("meilisearch"), color: "#ff5caa", baseCost: 0 },
-            { id: "typesense", name: "Typesense", icon: logo("typesense"), color: "#d32f2f", baseCost: 0 },
-        ],
-    },
+const KNOWN_COLORS: Record<string, string> = {
+    react: "#61dafb", nextjs: "#000000", remix: "#000000", gatsby: "#663399",
+    vue: "#42b883", nuxt: "#00dc82", svelte: "#ff3e00", sveltekit: "#ff3e00",
+    angular: "#dd0031", solid: "#2c4f7c", astro: "#ff5d01", qwik: "#0080ff",
+    htmx: "#3366cc", alpinejs: "#77c1d2", preact: "#673ab8", ember: "#e04e39",
+    lit: "#324fff", stencil: "#000000", vite: "#646cff", webpack: "#8dd6f9",
+    turbopack: "#000000", esbuild: "#ffcf00", tailwindcss: "#06b6d4",
+    shadcn: "#000000", "chakra-ui": "#319795", mui: "#007fff",
+    "ant-design": "#1677ff", radix: "#000000", bootstrap: "#7952b3",
+    "styled-components": "#db7093", "framer-motion": "#0055ff", gsap: "#88ce02",
+    threejs: "#000000", r3f: "#000000", zustand: "#433b2e", redux: "#764abc",
+    "tanstack-query": "#ff4154", jotai: "#000000", d3: "#f9a03c",
+    recharts: "#61dafb", chartjs: "#ff6384",
+
+    express: "#000000", nestjs: "#e0234e", fastify: "#000000", hono: "#e36002",
+    trpc: "#2596be", deno: "#000000", bun: "#fbf0df", fastapi: "#009688",
+    django: "#092e20", flask: "#000000", litestar: "#3776ab",
+    "go-gin": "#00add8", "go-fiber": "#00add8", "go-echo": "#00add8",
+    "actix-web": "#000000", axum: "#000000",
+    "spring-boot": "#6db33f", quarkus: "#4695eb", ktor: "#7f52ff",
+    rails: "#cc0000", laravel: "#ff2d20", symfony: "#000000",
+    aspnet: "#512bd4", phoenix: "#fd4f00",
+    convex: "#f3722c", supabase: "#3ecf8e", firebase: "#ffca28",
+    appwrite: "#fd366e", pocketbase: "#b8dbe4", nhost: "#0d9488",
+
+    postgresql: "#4169e1", mysql: "#4479a1", mariadb: "#003545",
+    sqlite: "#003b57", turso: "#4ff8d2", cockroachdb: "#6933ff",
+    planetscale: "#000000", neon: "#00e599", mongodb: "#47a248",
+    couchdb: "#e42528", redis: "#dc382d", valkey: "#0d47a1",
+    dragonfly: "#6c47ff", memcached: "#000000",
+    cassandra: "#1287b1", scylladb: "#6cd5eb", neo4j: "#008cc1",
+    dgraph: "#e50695", timescaledb: "#fdb515", influxdb: "#22adf6",
+    clickhouse: "#ffcc21", dynamodb: "#4053d6", "cosmos-db": "#0078d4",
+    "cloud-spanner": "#4285f4", pinecone: "#000000", weaviate: "#01c6b2",
+    qdrant: "#dc244c", chroma: "#000000", milvus: "#00a1ea",
+    pgvector: "#4169e1", surrealdb: "#ff00a0", tigerbeetle: "#ff8c00",
+
+    clerk: "#6c47ff", auth0: "#eb5424", "firebase-auth": "#ffca28",
+    "supabase-auth": "#3ecf8e", nextauth: "#000000", lucia: "#5f57ff",
+    keycloak: "#4d4d4d", cognito: "#ff9900", stytch: "#19303d",
+    workos: "#6363f1",
+
+    openai: "#10a37f", anthropic: "#d4a574", "google-gemini": "#886fff",
+    deepseek: "#0066ff", groq: "#f55036", "together-ai": "#000000",
+    replicate: "#000000", ollama: "#000000", vllm: "#000000",
+    pytorch: "#ee4c2c", tensorflow: "#ff6f00", jax: "#4285f4",
+    huggingface: "#ffcc00", langchain: "#1c3c3c", llamaindex: "#000000",
+    "vercel-ai-sdk": "#000000", crewai: "#000000", autogen: "#0078d4",
+    "openai-agents-sdk": "#10a37f", mcp: "#d4a574",
+    opencv: "#5c3ee8", elevenlabs: "#000000", whisper: "#10a37f",
+    deepgram: "#13ef93",
+
+    "react-native": "#61dafb", expo: "#000020", flutter: "#02569b",
+    "swift-ios": "#f05138", "kotlin-android": "#7f52ff",
+    "kotlin-multiplatform": "#7f52ff", capacitor: "#119eff",
+    "tauri-mobile": "#ffc131",
+
+    electron: "#47848f", tauri: "#ffc131", wails: "#00add8",
+    "dotnet-maui": "#512bd4", qt: "#41cd52",
+
+    vercel: "#000000", netlify: "#00c7b7", railway: "#0b0d0e",
+    render: "#46e3b7", "fly-io": "#7b3fe4", coolify: "#6f42c1",
+    aws: "#ff9900", gcp: "#4285f4", azure: "#0078d4",
+    "cloudflare-workers": "#f38020", "aws-lambda": "#ff9900",
+    "google-cloud-run": "#4285f4", docker: "#2496ed",
+    kubernetes: "#326ce5",
+
+    stripe: "#635bff", lemonsqueezy: "#ffc233", paddle: "#000000",
+
+    kafka: "#231f20", rabbitmq: "#ff6600", sqs: "#ff9900",
+    bullmq: "#dc382d", nats: "#27aae1", inngest: "#5d5fef",
+    temporal: "#000000",
+
+    elasticsearch: "#005571", algolia: "#5468ff",
+    meilisearch: "#ff5caa", typesense: "#d32f2f",
+
+    sentry: "#362d59", datadog: "#632ca6", grafana: "#f46800",
+    prometheus: "#e6522c", posthog: "#1d4aff", betterstack: "#3bc98e",
+
+    "github-actions": "#2088ff", "gitlab-ci": "#fc6d26",
+    "vercel-deploy": "#000000", turborepo: "#000000", nx: "#143055",
+
+    s3: "#569a31", "cloudflare-r2": "#f38020", uploadthing: "#eb2525",
+
+    sanity: "#f03e2f", contentful: "#2478cc", strapi: "#4945ff",
+    payload: "#000000", wordpress: "#21759b",
+
+    pusher: "#300d4f", ably: "#03020d", socketio: "#010101",
+    livekit: "#000000",
+
+    resend: "#000000", sendgrid: "#1a82e2", postmark: "#ffde00",
+
+    vitest: "#6e9f18", jest: "#c21325", playwright: "#2ead33",
+    cypress: "#69d3a7", storybook: "#ff4785", pytest: "#0a9edc",
+
+    graphql: "#e10098", grpc: "#244c5a", prisma: "#2d3748",
+    drizzle: "#c5f74f", hasura: "#1eb4d4",
+
+    solidity: "#363636", hardhat: "#fff100", thirdweb: "#f213a4",
+    wagmi: "#1e1e20",
+
+    unity: "#000000", unreal: "#000000", godot: "#478cbf",
+
+    "aws-iot": "#ff9900", mosquitto: "#3c5280", "home-assistant": "#41bdf5",
+};
+
+const CATEGORY_META: Record<string, { name: string; icon: string }> = {
+    frontend: { name: "Frontend", icon: "palette" },
+    backend: { name: "Backend", icon: "server" },
+    database: { name: "Database", icon: "database" },
+    auth: { name: "Authentication", icon: "lock" },
+    ai: { name: "AI / ML", icon: "brain" },
+    mobile: { name: "Mobile", icon: "smartphone" },
+    desktop: { name: "Desktop", icon: "monitor" },
+    hosting: { name: "Cloud & Hosting", icon: "cloud" },
+    payments: { name: "Payments", icon: "credit-card" },
+    messaging: { name: "Messaging & Queues", icon: "mail" },
+    search: { name: "Search", icon: "search" },
+    monitoring: { name: "Monitoring", icon: "activity" },
+    cicd: { name: "CI/CD", icon: "refresh-cw" },
+    storage: { name: "Storage", icon: "hard-drive" },
+    cms: { name: "CMS", icon: "file-text" },
+    realtime: { name: "Realtime", icon: "radio" },
+    email: { name: "Email", icon: "at-sign" },
+    testing: { name: "Testing", icon: "check-circle" },
+    api: { name: "API & ORM", icon: "link" },
+    blockchain: { name: "Blockchain", icon: "hexagon" },
+    gaming: { name: "Game Dev", icon: "gamepad-2" },
+    iot: { name: "IoT", icon: "wifi" },
+};
+
+const CATEGORY_ORDER = [
+    "frontend", "backend", "database", "hosting", "ai", "auth",
+    "mobile", "desktop", "payments", "messaging", "search",
+    "monitoring", "cicd", "storage", "cms", "realtime", "email",
+    "testing", "api", "blockchain", "gaming", "iot",
 ];
+
+function metaToDef(m: ComponentMeta): ComponentDefinition {
+    const slug = m.icon;
+    const isEmoji = slug.length <= 3 && !slug.match(/^[a-z]/);
+    const iconUrl = isEmoji ? slug : logo(slug);
+    const color = KNOWN_COLORS[m.key] ?? "#6b7280";
+    return {
+        id: m.key,
+        name: m.name,
+        icon: iconUrl,
+        color,
+        description: m.description,
+        baseCost: m.scores.cost,
+    };
+}
+
+function buildLibrary(): ComponentCategory[] {
+    const grouped = new Map<string, ComponentMeta[]>();
+    for (const comp of ALL_COMPONENTS) {
+        if (!grouped.has(comp.category)) grouped.set(comp.category, []);
+        grouped.get(comp.category)!.push(comp);
+    }
+
+    const result: ComponentCategory[] = [];
+    for (const catId of CATEGORY_ORDER) {
+        const items = grouped.get(catId);
+        if (!items || items.length === 0) continue;
+        const meta = CATEGORY_META[catId] ?? { name: catId, icon: "box" };
+        result.push({
+            id: catId,
+            name: meta.name,
+            icon: meta.icon,
+            components: items.map(metaToDef),
+        });
+    }
+    return result;
+}
+
+export const COMPONENT_LIBRARY: ComponentCategory[] = buildLibrary();
 
 export function getComponentById(id: string): ComponentDefinition | undefined {
     for (const category of COMPONENT_LIBRARY) {
@@ -201,4 +207,3 @@ export function getComponentById(id: string): ComponentDefinition | undefined {
 export function getCategoryById(id: string): ComponentCategory | undefined {
     return COMPONENT_LIBRARY.find((cat) => cat.id === id);
 }
-

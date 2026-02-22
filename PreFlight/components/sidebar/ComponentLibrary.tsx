@@ -19,13 +19,22 @@ import {
     RefreshCw,
     Activity,
     Search as SearchIcon,
+    Smartphone,
+    Monitor,
+    CreditCard,
+    HardDrive,
+    FileText,
+    Radio,
+    AtSign,
+    CheckCircle,
+    Link,
+    Hexagon,
+    Gamepad2,
+    Wifi,
     LucideIcon
 } from "lucide-react";
 import { cn, isDarkColor } from "@/lib/utils";
 
-// Map icon names to Lucide components
-
-// Map icon names to Lucide components
 const iconMap: Record<string, LucideIcon> = {
     server: Server,
     palette: Palette,
@@ -39,11 +48,23 @@ const iconMap: Record<string, LucideIcon> = {
     "refresh-cw": RefreshCw,
     activity: Activity,
     search: SearchIcon,
+    smartphone: Smartphone,
+    monitor: Monitor,
+    "credit-card": CreditCard,
+    "hard-drive": HardDrive,
+    "file-text": FileText,
+    radio: Radio,
+    "at-sign": AtSign,
+    "check-circle": CheckCircle,
+    link: Link,
+    hexagon: Hexagon,
+    "gamepad-2": Gamepad2,
+    wifi: Wifi,
 };
 
 export default function ComponentLibrary() {
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
-        new Set(["backend", "frontend", "database", "hosting"])
+        new Set(["frontend", "backend", "database", "hosting", "ai"])
     );
     const [searchQuery, setSearchQuery] = useState("");
 

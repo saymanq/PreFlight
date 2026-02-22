@@ -50,33 +50,59 @@ export function Canvas() {
         (event: DragEvent) => {
             event.preventDefault();
 
-            const componentType = event.dataTransfer.getData("application/preflight-component");
-            if (!componentType) return;
-
-            const component = getComponentByType(componentType);
-            if (!component) return;
-
             const position = reactFlowInstance.current?.screenToFlowPosition({
                 x: event.clientX,
                 y: event.clientY,
             }) ?? { x: 0, y: 0 };
 
-            const newNode: ArchNode = {
-                id: `${componentType}_${Date.now()}`,
-                type: "custom",
-                position,
-                data: {
-                    type: component.type,
-                    category: component.category,
-                    label: component.label,
-                    provider: component.provider,
-                    icon: component.icon,
-                    config: { ...component.defaultConfig },
-                    tags: [...component.tags],
-                },
-            };
+            const preflightType = event.dataTransfer.getData("application/preflight-component");
+            if (preflightType) {
+                const component = getComponentByType(preflightType);
+                if (!component) return;
 
-            addNode(newNode);
+                addNode({
+                    id: `${preflightType}_${Date.now()}`,
+                    type: "custom",
+                    position,
+                    data: {
+                        type: component.type,
+                        category: component.category,
+                        label: component.label,
+                        provider: component.provider,
+                        icon: component.icon,
+                        config: { ...component.defaultConfig },
+                        tags: [...component.tags],
+                    },
+                });
+                return;
+            }
+
+            const reactFlowData = event.dataTransfer.getData("application/reactflow");
+            if (reactFlowData) {
+                try {
+                    const parsed = JSON.parse(reactFlowData);
+                    const componentId = parsed.componentId ?? parsed.id;
+                    if (!componentId) return;
+
+                    const catalogComponent = getComponentByType(componentId);
+
+                    addNode({
+                        id: `${componentId}_${Date.now()}`,
+                        type: "custom",
+                        position,
+                        data: {
+                            type: catalogComponent?.type ?? componentId,
+                            category: catalogComponent?.category ?? parsed.category ?? "backend",
+                            label: catalogComponent?.label ?? parsed.label ?? componentId,
+                            provider: catalogComponent?.provider ?? "independent",
+                            icon: catalogComponent?.icon ?? parsed.icon ?? "Server",
+                            config: catalogComponent?.defaultConfig ? { ...catalogComponent.defaultConfig } : {},
+                            tags: catalogComponent?.tags ? [...catalogComponent.tags] : [],
+                        },
+                    });
+                } catch { /* ignore malformed drag data */ }
+                return;
+            }
         },
         [addNode]
     );

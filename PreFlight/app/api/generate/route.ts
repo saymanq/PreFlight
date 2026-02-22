@@ -1,21 +1,27 @@
 import { google } from "@ai-sdk/google";
 import { generateObject } from "ai";
 import { z } from "zod";
-import { COMPONENT_CATALOG, getComponentByType, type ComponentCategory } from "@/lib/component-catalog";
+import { COMPONENT_CATALOG, getComponentByType } from "@/lib/component-catalog";
 
 const VALID_TYPES = COMPONENT_CATALOG.map((c) => c.type);
 const VALID_TYPE_SET = new Set(VALID_TYPES);
 
-const CATEGORY_Y: Record<ComponentCategory, number> = {
+const CATEGORY_Y: Record<string, number> = {
     frontend: 100,
     auth: 220,
     backend: 340,
     ai: 360,
     data: 520,
     storage: 520,
+    mobile: 520,
+    desktop: 520,
     infra: 620,
     deployment: 700,
     observability: 700,
+    payments: 460,
+    realtime: 460,
+    testing: 780,
+    api: 460,
 };
 
 const architectureSchema = z.object({
@@ -135,7 +141,7 @@ function sanitizeNodeId(rawId: string | undefined, fallback: string, usedIds: Se
     return id;
 }
 
-function defaultPositionFor(type: string, categoryCounts: Partial<Record<ComponentCategory, number>>) {
+function defaultPositionFor(type: string, categoryCounts: Partial<Record<string, number>>) {
     const def = getComponentByType(type);
     const category = def?.category ?? "backend";
     const idx = categoryCounts[category] ?? 0;
@@ -170,38 +176,37 @@ function buildNode(type: string, index: number, position?: { x: number; y: numbe
 
 function buildFallbackArchitecture(prompt: string, constraints: Record<string, string | undefined>) {
     const normalizedPrompt = (prompt || "").toLowerCase();
-    const selected = new Set<string>(["nextjs_app", "convex_backend", "convex_db", "clerk_auth"]);
+    const selected = new Set<string>(["nextjs", "convex", "postgresql", "clerk"]);
 
     if (/(ai|llm|assistant|chatbot|agent|rag|semantic|embedding|vector)/i.test(normalizedPrompt)) {
-        selected.add("openai_llm");
-        selected.add("embeddings_provider");
-        selected.add("vector_db");
+        selected.add("openai");
+        selected.add("pinecone");
     }
 
     if (/(upload|file|image|video|document|attachment)/i.test(normalizedPrompt)) {
-        selected.add("s3_r2");
+        selected.add("s3");
     }
 
     if (/(realtime|real-time|live|presence|collab|collaboration)/i.test(normalizedPrompt)) {
-        selected.add("websocket_realtime");
+        selected.add("pusher");
     }
 
     if (/(payment|subscription|billing|checkout)/i.test(normalizedPrompt)) {
-        selected.add("external_api");
+        selected.add("stripe");
     }
 
     if (constraints.trafficExpectation === "high") {
-        selected.add("cdn");
-        selected.add("rate_limiter");
+        selected.add("cloudflare-workers");
+        selected.add("redis");
     }
 
     if (constraints.timeline !== "hackathon") {
-        selected.add("monitoring");
+        selected.add("sentry");
     }
 
-    if (selected.has("openai_llm")) {
-        selected.add("queue");
-        selected.add("worker");
+    if (selected.has("openai")) {
+        selected.add("kafka");
+        selected.add("bullmq");
     }
 
     const nodeTypes = [...selected].filter((type) => VALID_TYPE_SET.has(type));
@@ -234,24 +239,22 @@ function buildFallbackArchitecture(prompt: string, constraints: Record<string, s
         });
     };
 
-    pushEdge("nextjs_app", "clerk_auth", "authenticates", "HTTP");
-    pushEdge("nextjs_app", "convex_backend", "invokes", "HTTP");
-    pushEdge("convex_backend", "convex_db", "reads", "RPC");
-    pushEdge("convex_backend", "convex_db", "writes", "RPC");
-    pushEdge("convex_backend", "s3_r2", "uploads_to", "HTTP");
-    pushEdge("convex_backend", "openai_llm", "invokes", "HTTP");
-    pushEdge("convex_backend", "embeddings_provider", "invokes", "HTTP");
-    pushEdge("embeddings_provider", "vector_db", "writes", "RPC");
-    pushEdge("convex_backend", "vector_db", "reads", "RPC");
-    pushEdge("convex_backend", "queue", "queues", "RPC");
-    pushEdge("queue", "worker", "invokes", "RPC");
-    pushEdge("worker", "openai_llm", "invokes", "HTTP");
-    pushEdge("nextjs_app", "websocket_realtime", "subscribes", "WebSocket");
-    pushEdge("convex_backend", "websocket_realtime", "publishes", "WebSocket");
-    pushEdge("nextjs_app", "cdn", "serves", "HTTP");
-    pushEdge("convex_backend", "monitoring", "emits", "HTTP");
-    pushEdge("nextjs_app", "monitoring", "emits", "HTTP");
-    pushEdge("convex_backend", "external_api", "invokes", "HTTP");
+    pushEdge("nextjs", "clerk", "authenticates", "HTTP");
+    pushEdge("nextjs", "convex", "invokes", "HTTP");
+    pushEdge("convex", "postgresql", "reads", "RPC");
+    pushEdge("convex", "postgresql", "writes", "RPC");
+    pushEdge("convex", "s3", "uploads_to", "HTTP");
+    pushEdge("convex", "openai", "invokes", "HTTP");
+    pushEdge("convex", "pinecone", "reads", "RPC");
+    pushEdge("convex", "kafka", "queues", "RPC");
+    pushEdge("kafka", "bullmq", "invokes", "RPC");
+    pushEdge("bullmq", "openai", "invokes", "HTTP");
+    pushEdge("nextjs", "pusher", "subscribes", "WebSocket");
+    pushEdge("convex", "pusher", "publishes", "WebSocket");
+    pushEdge("nextjs", "cloudflare-workers", "serves", "HTTP");
+    pushEdge("convex", "sentry", "emits", "HTTP");
+    pushEdge("nextjs", "sentry", "emits", "HTTP");
+    pushEdge("convex", "stripe", "invokes", "HTTP");
 
     return {
         nodes,
@@ -268,7 +271,7 @@ function buildFallbackArchitecture(prompt: string, constraints: Record<string, s
 function enrichGeneratedGraph(result: z.infer<typeof architectureSchema>) {
     const usedIds = new Set<string>();
     const idMap = new Map<string, string>();
-    const categoryCounts: Partial<Record<ComponentCategory, number>> = {};
+    const categoryCounts: Partial<Record<string, number>> = {};
 
     const enrichedNodes = result.nodes
         .map((node, index) => {

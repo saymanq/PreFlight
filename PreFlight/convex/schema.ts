@@ -34,10 +34,10 @@ export default defineSchema({
     .index("by_projectId", ["projectId"]),
 
   projects: defineTable({
-    ownerId: v.id("users"),
+    ownerId: v.optional(v.id("users")),
     name: v.string(),
     description: v.optional(v.string()),
-    constraints: v.object({
+    constraints: v.optional(v.object({
       budgetLevel: v.string(),
       teamSize: v.number(),
       timeline: v.string(),
@@ -49,23 +49,24 @@ export default defineSchema({
       dataSensitivity: v.string(),
       preferredProviders: v.array(v.string()),
       avoidProviders: v.array(v.string()),
-    }),
-    graph: v.object({
+    })),
+    graph: v.optional(v.object({
       nodes: v.array(v.any()),
       edges: v.array(v.any()),
-    }),
+    })),
     scores: v.optional(v.any()),
     lintIssues: v.optional(v.array(v.any())),
-    nodeCount: v.number(),
+    nodeCount: v.optional(v.number()),
     overallScore: v.optional(v.number()),
-    lintErrorCount: v.number(),
-    lintWarningCount: v.number(),
+    lintErrorCount: v.optional(v.number()),
+    lintWarningCount: v.optional(v.number()),
     sourceIdeationThreadId: v.optional(v.id("chatThreads")),
     sourceIdeationSnapshot: v.optional(v.array(messageSchema)),
     selectedComponentIds: v.optional(v.array(v.string())),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-    archived: v.boolean(),
+    ideaPrompt: v.optional(v.string()),
+    createdAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+    archived: v.optional(v.boolean()),
   })
     .index("by_owner_archived", ["ownerId", "archived"])
     .index("by_owner_updated", ["ownerId", "updatedAt"]),
