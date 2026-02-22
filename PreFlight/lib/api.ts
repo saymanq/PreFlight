@@ -76,6 +76,30 @@ export interface PlanMessage {
   content: string;
 }
 
+export interface IdeationArtifact {
+  stage: "discover" | "scope" | "constraints" | "ready";
+  ideaSummary: string;
+  targetUsers?: string;
+  problem?: string;
+  coreOutcome?: string;
+  mustHaveFeatures: string[];
+  niceToHaveFeatures: string[];
+  constraints: {
+    budgetLevel?: string;
+    teamSize?: number;
+    teamSetup?: string;
+    timeline?: string;
+    trafficExpectation?: string;
+    dataSensitivity?: string;
+    regionCount?: number;
+    uptimeTarget?: number;
+    devExperienceGoal?: string;
+  };
+  openQuestions: string[];
+  confidence: number;
+  readyForArchitecture: boolean;
+}
+
 export interface PlanChatResponse {
   message: string;
   session_id: string;
@@ -83,6 +107,7 @@ export interface PlanChatResponse {
   assistantMessage?: string;
   suggestedComponentIds?: string[];
   readyToGenerate?: boolean;
+  artifact?: IdeationArtifact;
 }
 
 export async function sendPlanMessage(

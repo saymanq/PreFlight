@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { sendPlanMessage } from "@/lib/api";
+import { sendPlanMessage, type IdeationArtifact } from "@/lib/api";
 import { buildGraphFromComponentIds } from "@/lib/generation/graph-builder";
 import { COMPONENT_LIBRARY, getComponentById } from "@/lib/components-data";
 import { buildReportMarkdown, buildReportHtml } from "@/lib/plan-report";
@@ -20,6 +20,8 @@ import {
   ChevronRight,
 } from "lucide-react";
 
+const ARTIFACT_MARKER_REGEX = /<pf_artifact>([\s\S]*?)<\/pf_artifact>/i;
+
 const QUICK_ACTIONS = [
   { icon: "⚡", label: "SaaS App", prompt: "I want to build a SaaS application" },
   { icon: "🤖", label: "AI Agent", prompt: "I want to build an AI agent or assistant" },
@@ -30,6 +32,28 @@ const QUICK_ACTIONS = [
 
 function stripComponentIdsLine(text: string): string {
   return text.replace(/\n?\s*COMPONENT_IDS:\s*[^\n]+/i, "").trim();
+}
+
+function stripHiddenContent(text: string): string {
+  return stripComponentIdsLine(text.replace(/<pf_artifact>[\s\S]*?<\/pf_artifact>/gi, "").trim());
+}
+
+function parseArtifactFromText(text: string): IdeationArtifact | null {
+  const match = text.match(ARTIFACT_MARKER_REGEX);
+  if (!match?.[1]) return null;
+
+  try {
+    const decoded = decodeURIComponent(match[1]);
+    return JSON.parse(decoded) as IdeationArtifact;
+  } catch {
+    return null;
+  }
+}
+
+function attachArtifactToText(text: string, artifact: IdeationArtifact | null): string {
+  if (!artifact) return text;
+  const payload = encodeURIComponent(JSON.stringify(artifact));
+  return `${text}\n<pf_artifact>${payload}</pf_artifact>`;
 }
 
 function getCategoryForComponent(componentId: string): string {
@@ -123,7 +147,7 @@ function MessageBubble({
   onToggleComponent: (id: string) => void;
 }) {
   const isUser = message.role === "user";
-  const displayContent = isUser ? message.content : stripComponentIdsLine(message.content);
+  const displayContent = isUser ? message.content : stripHiddenContent(message.content);
 
   const renderMarkdown = (text: string) => {
     const parts = text.split(/(\*\*.*?\*\*|\n)/g);
@@ -184,6 +208,85 @@ function MessageBubble({
   );
 }
 
+function stageLabel(stage: IdeationArtifact["stage"] | undefined): string {
+  if (stage === "discover") return "Discovery";
+  if (stage === "scope") return "Scope";
+  if (stage === "constraints") return "Constraints";
+  if (stage === "ready") return "Ready";
+  return "Ideation";
+}
+
+function ArtifactPanel({ artifact }: { artifact: IdeationArtifact }) {
+  const confidencePercent = Math.round(Math.max(0, Math.min(1, artifact.confidence ?? 0)) * 100);
+
+  const keyConstraints = [
+    artifact.constraints.teamSize ? `Team: ${artifact.constraints.teamSize}` : null,
+    artifact.constraints.timeline ? `Timeline: ${artifact.constraints.timeline}` : null,
+    artifact.constraints.trafficExpectation ? `Traffic: ${artifact.constraints.trafficExpectation}` : null,
+    artifact.constraints.budgetLevel ? `Budget: ${artifact.constraints.budgetLevel}` : null,
+    artifact.constraints.uptimeTarget ? `Uptime: ${artifact.constraints.uptimeTarget}%` : null,
+    artifact.constraints.regionCount ? `Regions: ${artifact.constraints.regionCount}` : null,
+  ].filter(Boolean) as string[];
+
+  return (
+    <div
+      className="rounded-2xl border border-[var(--plan-border)] bg-[var(--plan-bg-card)] p-4"
+      style={{ boxShadow: "0 1px 2px rgba(0,0,0,0.3)" }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-xs font-semibold tracking-wide text-[var(--plan-text-muted)] uppercase">
+          Idea Artifact
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] px-2 py-0.5 rounded-md bg-[var(--plan-bg-chip)] text-[var(--plan-text-secondary)]">
+            {stageLabel(artifact.stage)}
+          </span>
+          <span className="text-[11px] px-2 py-0.5 rounded-md bg-[var(--plan-bg-chip)] text-[var(--plan-text-secondary)]">
+            Confidence {confidencePercent}%
+          </span>
+        </div>
+      </div>
+
+      <p className="mt-2 text-sm text-[var(--plan-text)]">{artifact.ideaSummary}</p>
+
+      {artifact.mustHaveFeatures.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[11px] font-semibold text-[var(--plan-text-muted)] uppercase">Must-have Features</p>
+          <ul className="mt-1 text-xs text-[var(--plan-text-secondary)] space-y-1">
+            {artifact.mustHaveFeatures.slice(0, 5).map((feature) => (
+              <li key={feature}>• {feature}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {keyConstraints.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {keyConstraints.map((constraint) => (
+            <span
+              key={constraint}
+              className="text-[11px] px-2 py-0.5 rounded-md bg-[var(--plan-bg-chip)] text-[var(--plan-text-secondary)]"
+            >
+              {constraint}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {artifact.openQuestions.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[11px] font-semibold text-[var(--plan-text-muted)] uppercase">Open Questions</p>
+          <ul className="mt-1 text-xs text-[var(--plan-text-secondary)] space-y-1">
+            {artifact.openQuestions.slice(0, 3).map((question) => (
+              <li key={question}>• {question}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PlanningChat() {
   const threads = useQuery(api.chatThreads.listIdeationThreads, { includeArchived: false }) ?? [];
   const createThread = useMutation(api.chatThreads.createIdeationThread);
@@ -194,6 +297,7 @@ export default function PlanningChat() {
 
   const [threadId, setThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [artifact, setArtifact] = useState<IdeationArtifact | null>(null);
   const [suggestedIds, setSuggestedIds] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [input, setInput] = useState("");
@@ -224,6 +328,7 @@ export default function PlanningChat() {
       if (threadId) {
         setMessages([]);
       }
+      setArtifact(null);
       syncedThreadRef.current = null;
       return;
     }
@@ -236,12 +341,18 @@ export default function PlanningChat() {
     }
 
     syncedThreadRef.current = activeId;
-    setMessages(
-      (activeThread.messages ?? []).map((msg) => ({
-        role: msg.role as "user" | "assistant",
-        content: msg.content,
-      }))
-    );
+    const hydratedMessages = (activeThread.messages ?? []).map((msg) => ({
+      role: msg.role as "user" | "assistant",
+      content: stripHiddenContent(msg.content),
+    }));
+    setMessages(hydratedMessages);
+
+    const latestArtifact = [...(activeThread.messages ?? [])]
+      .reverse()
+      .map((msg) => parseArtifactFromText(msg.content))
+      .find((value) => value !== null) ?? null;
+    setArtifact(latestArtifact);
+
     setSuggestedIds([]);
     setSelectedIds([]);
     setError(null);
@@ -263,6 +374,7 @@ export default function PlanningChat() {
     setThreadId(id);
     syncedThreadRef.current = id;
     setMessages([]);
+    setArtifact(null);
     setSuggestedIds([]);
     setSelectedIds([]);
     setInput("");
@@ -280,6 +392,7 @@ export default function PlanningChat() {
         const remaining = threads.filter((thread) => String(thread._id) !== id);
         setThreadId(remaining[0] ? String(remaining[0]._id) : null);
         setMessages([]);
+        setArtifact(null);
         setSuggestedIds([]);
         setSelectedIds([]);
       }
@@ -310,18 +423,20 @@ export default function PlanningChat() {
       });
 
       const response = await sendPlanMessage(nextMessages);
-      const assistantText = response.message || response.assistantMessage || "";
+      const assistantText = stripHiddenContent(response.message || response.assistantMessage || "");
+      const artifactFromResponse = response.artifact ?? null;
       const componentIds =
         response.suggested_component_ids ?? response.suggestedComponentIds ?? [];
 
       const fullHistory = [...nextMessages, { role: "assistant" as const, content: assistantText }];
       setMessages(fullHistory);
+      setArtifact(artifactFromResponse);
 
       try {
         await appendMessage({
           threadId: ensuredThreadId as any,
           role: "assistant",
-          content: assistantText,
+          content: attachArtifactToText(assistantText, artifactFromResponse),
         });
       } catch (persistError) {
         console.error("Failed to persist assistant ideation message:", persistError);
@@ -420,12 +535,16 @@ export default function PlanningChat() {
 
   const started = messages.length > 0;
   const showComponentCards = suggestedIds.length > 0;
-  const canGenerate = showComponentCards && selectedIds.length > 0;
+  const canGenerate =
+    showComponentCards &&
+    selectedIds.length > 0 &&
+    (artifact ? artifact.readyForArchitecture : true);
 
   function sessionPreview(msgs: { role: string; content: string }[]) {
     const first = msgs.find((msg) => msg.role === "user");
     if (!first) return "Empty chat";
-    return first.content.length > 50 ? `${first.content.slice(0, 50)}...` : first.content;
+    const preview = stripHiddenContent(first.content);
+    return preview.length > 50 ? `${preview.slice(0, 50)}...` : preview;
   }
 
   return (
@@ -578,6 +697,7 @@ export default function PlanningChat() {
 
               <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 py-6 max-w-[720px] w-full mx-auto">
                 <div className="flex flex-col gap-6">
+                  {artifact && <ArtifactPanel artifact={artifact} />}
                   {messages.map((msg, index) => (
                     <MessageBubble
                       key={index}
