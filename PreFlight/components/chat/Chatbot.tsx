@@ -7,6 +7,7 @@ import { useArchitectureStore } from "@/lib/architecture-store";
 import { Send, Bot, Trash2 } from "lucide-react";
 import { generateId } from "@/lib/utils";
 import { sendChatMessage } from "@/lib/api";
+import { MarkdownContent } from "@/components/ui/markdown-content";
 
 interface ChatbotProps {
   projectId: string;
@@ -293,9 +294,16 @@ export default function Chatbot({ projectId, sourceIdeationSnapshot = [] }: Chat
                       : "glass border border-[var(--glass-border)] text-[var(--foreground)]"
                   }`}
                 >
-                  <div className="text-sm whitespace-pre-wrap break-words">
-                    {message.content}
-                  </div>
+                  {message.role === "assistant" ? (
+                    <MarkdownContent
+                      content={message.content}
+                      className="text-sm break-words [&_code]:bg-black/20 [&_code]:text-[var(--accent)] [&_a]:text-[var(--accent)]"
+                    />
+                  ) : (
+                    <div className="text-sm whitespace-pre-wrap break-words">
+                      {message.content}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
