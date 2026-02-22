@@ -38,7 +38,7 @@ export function CustomEdge({
                 path={edgePath}
                 markerEnd={markerEnd}
                 style={{
-                    stroke: selected ? "oklch(0.65 0.2 265)" : "oklch(0.4 0.01 285)",
+                    stroke: selected ? "#008000" : "oklch(0.4 0.01 285)",
                     strokeWidth: selected ? 2 : 1.5,
                     ...style,
                 }}

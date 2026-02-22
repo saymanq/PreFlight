@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   description:
     "Design, compare, validate, and export implementation-ready architecture plans before building.",
   icons: {
-    icon: "/convex.svg",
+    icon: "/preflight-logo.png",
   },
 };
 
@@ -26,11 +26,11 @@ export default function RootLayout({
           appearance={{
             baseTheme: undefined,
             variables: {
-              colorPrimary: "#7c5cfc",
-              colorBackground: "#141418",
-              colorText: "#f5f5f5",
-              colorInputBackground: "#1e1e24",
-              colorInputText: "#f5f5f5",
+              colorPrimary: "#008000",
+              colorBackground: "#000000",
+              colorText: "#FFFFFF",
+              colorInputBackground: "#111111",
+              colorInputText: "#FFFFFF",
             },
           }}
         >

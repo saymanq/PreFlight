@@ -15,14 +15,13 @@ import { runLinter } from "@/lib/linting/lint-engine";
 import { buildGraphFromComponentIds } from "@/lib/generation/graph-builder";
 import {
   ArrowLeft,
-  Sparkles,
-  GitCompare,
-  ShieldCheck,
   FileOutput,
-  Undo2,
-  Redo2,
   Check,
   Loader2,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
 } from "lucide-react";
 
 type GenerationStatus = "pending" | "generating" | "ready" | "failed";
@@ -46,6 +45,8 @@ export default function ProjectWorkspacePage() {
   const [hydrated, setHydrated] = useState(false);
   const [isGeneratingArchitecture, setIsGeneratingArchitecture] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
 
   const nodes = useArchitectureStore((s) => s.nodes);
   const edges = useArchitectureStore((s) => s.edges);
@@ -326,17 +327,26 @@ export default function ProjectWorkspacePage() {
   return (
     <ReactFlowProvider>
       <div className="flex flex-col h-screen bg-[var(--bg-primary)]">
-        <header className="h-12 flex items-center gap-2 px-3 glass border-b border-[var(--border)] z-20 shrink-0">
+        {/* Top Toolbar */}
+        <header className="h-12 flex items-center gap-2 px-3 glass gradient-border-b z-20 shrink-0">
+          <Link
+            href="/"
+            className="flex items-center shrink-0"
+            title="PreFlight"
+          >
+            <img
+              src="/preflight-logo.png"
+              alt="PreFlight"
+              className="h-11 w-auto object-contain"
+            />
+          </Link>
+
           <Link
             href="/projects"
             className="p-1.5 rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
           </Link>
-
-          <div className="w-7 h-7 rounded-md bg-gradient-to-br from-[var(--accent)] to-[var(--secondary)] flex items-center justify-center text-white font-bold text-xs">
-            P
-          </div>
 
           {editingName ? (
             <input
@@ -358,47 +368,28 @@ export default function ProjectWorkspacePage() {
 
           <div className="w-px h-5 bg-[var(--border)] mx-1" />
 
-          <button
-            onClick={runArchitectureGeneration}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] text-xs font-medium bg-gradient-to-r from-[var(--accent)] to-[var(--secondary)] text-white hover:shadow-[var(--clay-glow)] transition-all disabled:opacity-60"
-            disabled={isGeneratingArchitecture}
-          >
-            {isGeneratingArchitecture ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="w-3.5 h-3.5" />
-            )}
-            Regenerate
-          </button>
-          <button
-            onClick={() => setRightTab("compare")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] text-xs font-medium transition-colors ${rightTab === "compare" ? "bg-[var(--bg-hover)] text-[var(--accent)]" : "text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"}`}
-          >
-            <GitCompare className="w-3.5 h-3.5" />
-            Compare
-          </button>
-          <button
-            onClick={() => setRightTab("lint")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] text-xs font-medium transition-colors ${rightTab === "lint" ? "bg-[var(--bg-hover)] text-[var(--accent)]" : "text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"}`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            Lint
-          </button>
-          <button
-            onClick={() => setRightTab("export")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] text-xs font-medium transition-colors ${rightTab === "export" ? "bg-[var(--bg-hover)] text-[var(--accent)]" : "text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"}`}
-          >
-            <FileOutput className="w-3.5 h-3.5" />
-            Export
-          </button>
-
           <div className="flex-1" />
 
-          <button className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
-            <Undo2 className="w-3.5 h-3.5" />
-          </button>
-          <button className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
-            <Redo2 className="w-3.5 h-3.5" />
+          <button
+            onClick={() => setRightTab("export")}
+            className="group relative inline-flex items-center justify-center gap-1.5 px-6 py-2 overflow-hidden tracking-tighter text-[var(--text-primary)] bg-[var(--bg-surface)] rounded-md"
+          >
+            <span className="absolute left-1/2 top-1/2 w-0 h-0 -translate-x-1/2 -translate-y-1/2 transition-all duration-500 ease-out rounded-full bg-[var(--accent)] group-hover:w-56 group-hover:h-56" />
+            <span className="absolute bottom-0 left-0 h-full -ml-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-auto h-full opacity-100 object-stretch" viewBox="0 0 487 487">
+                <path fillOpacity=".1" fillRule="nonzero" fill="#FFF" d="M0 .3c67 2.1 134.1 4.3 186.3 37 52.2 32.7 89.6 95.8 112.8 150.6 23.2 54.8 32.3 101.4 61.2 149.9 28.9 48.4 77.7 98.8 126.4 149.2H0V.3z" />
+              </svg>
+            </span>
+            <span className="absolute top-0 right-0 w-12 h-full -mr-3">
+              <svg xmlns="http://www.w3.org/2000/svg" className="object-cover w-full h-full" viewBox="0 0 487 487">
+                <path fillOpacity=".1" fillRule="nonzero" fill="#FFF" d="M487 486.7c-66.1-3.6-132.3-7.3-186.3-37s-95.9-85.3-126.2-137.2c-30.4-51.8-49.3-99.9-76.5-151.4C70.9 109.6 35.6 54.8.3 0H487v486.7z" />
+              </svg>
+            </span>
+            <span className="absolute inset-0 w-full h-full -mt-1 rounded-lg opacity-30 bg-gradient-to-b from-transparent via-transparent to-white/20" />
+            <span className="relative flex items-center gap-1.5 text-xs font-semibold">
+              <FileOutput className="w-3.5 h-3.5" />
+              Export
+            </span>
           </button>
 
           <div className="w-px h-5 bg-[var(--border)] mx-1" />
@@ -409,26 +400,61 @@ export default function ProjectWorkspacePage() {
           </span>
         </header>
 
-        <div className="flex flex-1 overflow-hidden">
-          <aside className="w-[280px] border-r border-[var(--border)] bg-[var(--bg-secondary)] overflow-y-auto shrink-0">
-            <ComponentLibrary />
+        {/* Main Content: Left Sidebar | Canvas | Right Panel */}
+        <div className="flex flex-1 overflow-hidden relative">
+          {/* Left Sidebar — collapsible */}
+          <aside
+            className="border-r border-[var(--border)] bg-[var(--bg-secondary)] overflow-y-auto overflow-x-hidden shrink-0 transition-[width] duration-300 ease-in-out"
+            style={{ width: leftSidebarOpen ? 280 : 0 }}
+          >
+            <div className="w-[280px]">
+              <ComponentLibrary />
+            </div>
           </aside>
 
+          {/* Sidebar toggle tab */}
+          <button
+            onClick={() => setLeftSidebarOpen((v) => !v)}
+            className="absolute top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-5 h-10 rounded-r-md bg-[var(--bg-surface)] border border-l-0 border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all duration-300 ease-in-out"
+            style={{ left: leftSidebarOpen ? 280 : 0 }}
+            title={leftSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+          >
+            {leftSidebarOpen ? <PanelLeftClose className="w-3 h-3" /> : <PanelLeftOpen className="w-3 h-3" />}
+          </button>
+
+          {/* Center Canvas */}
           <main className="flex-1 relative">
             <ArchitectureCanvas />
           </main>
 
-          <aside className="w-[360px] border-l border-[var(--border)] bg-[var(--bg-secondary)] overflow-y-auto shrink-0">
-            <RightSidebar
-              activeTab={rightTab}
-              onTabChange={setRightTab}
-              projectId={projectId}
-              sourceIdeationSnapshot={(project.sourceIdeationSnapshot as any) ?? []}
-            />
+          {/* Right sidebar toggle tab */}
+          <button
+            onClick={() => setRightSidebarOpen((v) => !v)}
+            className="absolute top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-5 h-10 rounded-l-md bg-[var(--bg-surface)] border border-r-0 border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all duration-300 ease-in-out"
+            style={{ right: rightSidebarOpen ? 360 : 0 }}
+            title={rightSidebarOpen ? "Collapse panel" : "Expand panel"}
+          >
+            {rightSidebarOpen ? <PanelRightClose className="w-3 h-3" /> : <PanelRightOpen className="w-3 h-3" />}
+          </button>
+
+          {/* Right Panel — collapsible */}
+          <aside
+            className="border-l border-[var(--border)] bg-[var(--bg-secondary)] overflow-y-auto overflow-x-hidden shrink-0 transition-[width] duration-300 ease-in-out"
+            style={{ width: rightSidebarOpen ? 360 : 0 }}
+          >
+            <div className="w-[360px]">
+              <RightSidebar
+                activeTab={rightTab}
+                onTabChange={setRightTab}
+                projectId={projectId}
+                sourceIdeationSnapshot={(project.sourceIdeationSnapshot as any) ?? []}
+              />
+            </div>
           </aside>
         </div>
 
-        <footer className="h-10 flex items-center gap-2 px-4 border-t border-[var(--border)] bg-[var(--bg-secondary)] overflow-x-auto shrink-0">
+        {/* Bottom Constraints Bar */}
+        <footer className="h-10 flex items-center gap-2 px-4 bg-[var(--bg-secondary)] border-t border-[var(--border)] overflow-x-auto shrink-0">
           <span className="text-xs text-[var(--text-muted)] shrink-0">Constraints:</span>
           {displayConstraints.map((item) => (
             <button key={item.label} className="chip shrink-0">

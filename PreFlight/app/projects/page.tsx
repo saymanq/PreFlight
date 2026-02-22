@@ -96,11 +96,13 @@ export default function DashboardPage() {
             {/* Top bar */}
             <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-sm">
                 <div className="max-w-6xl mx-auto flex items-center justify-between px-6 h-14">
-                    <div className="flex items-center gap-2">
-                        <span className="text-lg font-bold bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent">
-                            Preflight
-                        </span>
-                    </div>
+                    <Link href="/" className="flex items-center gap-2 shrink-0" title="PreFlight">
+                        <img
+                            src="/preflight-logo.png"
+                            alt="PreFlight"
+                            className="h-11 w-auto object-contain"
+                        />
+                    </Link>
                     <div className="flex items-center gap-3">
                         <Link href="/dashboard" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
                             <MessageSquare className="h-3.5 w-3.5" />

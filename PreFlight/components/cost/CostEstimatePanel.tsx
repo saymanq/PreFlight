@@ -27,7 +27,7 @@ export default function CostEstimatePanel() {
                 <div className="text-sm text-[var(--foreground-secondary)] mb-1">
                     Total Monthly Cost
                 </div>
-                <div className="text-3xl font-bold text-[var(--foreground)] mb-2">
+                <div className="text-3xl font-bold gradient-text mb-2">
                     {formatCurrency(costEstimate.total)}
                 </div>
                 <div className="text-xs text-[var(--foreground-secondary)]">

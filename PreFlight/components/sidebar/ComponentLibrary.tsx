@@ -104,7 +104,7 @@ export default function ComponentLibrary() {
         <div className="h-full flex flex-col bg-[var(--background-secondary)] border-r border-[var(--border)]">
             {/* Header */}
             <div className="p-4 border-b border-[var(--border)]">
-                <h2 className="text-lg font-bold text-[var(--foreground)] mb-3">
+                <h2 className="text-lg font-bold text-[var(--accent)] mb-3">
                     Components
                 </h2>
                 <div className="relative">
@@ -195,7 +195,7 @@ export default function ComponentLibrary() {
             </div>
 
             {/* Footer hint */}
-            <div className="p-4 border-t border-[var(--border)] bg-[var(--background-tertiary)]">
+            <div className="p-4 bg-[var(--background-tertiary)] border-t border-[var(--border)]">
                 <p className="text-xs text-[var(--foreground-secondary)] text-center">
                     Drag components to canvas
                 </p>

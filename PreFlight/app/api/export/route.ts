@@ -7,16 +7,28 @@ import {
 
 export async function POST(req: Request) {
     try {
-        const { projectName, nodes, edges, scores } = await req.json();
+        const {
+            projectName,
+            nodes,
+            edges,
+            scores,
+            constraints,
+            features,
+            sourceIdeationSnapshot,
+            workspaceChatMessages,
+        } = await req.json();
 
-        const architectureSummary = nodes
+        const safeNodes = Array.isArray(nodes) ? nodes : [];
+        const safeEdges = Array.isArray(edges) ? edges : [];
+
+        const architectureSummary = safeNodes
             .map(
                 (n: { label: string; type: string; category: string; provider: string }) =>
                     `- ${n.label} (${n.type}, ${n.category}, provider: ${n.provider})`
             )
             .join("\n");
 
-        const connectionsSummary = edges
+        const connectionsSummary = safeEdges
             .map(
                 (e: { source: string; target: string; relationship: string }) =>
                     `- ${e.source} → ${e.target} (${e.relationship})`
@@ -33,6 +45,36 @@ export async function POST(req: Request) {
                 )
                 .join("\n")
             : "No scores available";
+
+        const ideationSummary = Array.isArray(sourceIdeationSnapshot) && sourceIdeationSnapshot.length > 0
+            ? sourceIdeationSnapshot
+                .slice(-14)
+                .map(
+                    (m: { role: string; content: string }) =>
+                        `- [${m.role}] ${m.content}`
+                )
+                .join("\n")
+            : "No ideation thread snapshot available.";
+
+        const workspaceConversationSummary = Array.isArray(workspaceChatMessages) && workspaceChatMessages.length > 0
+            ? workspaceChatMessages
+                .slice(-12)
+                .map(
+                    (m: { role: string; content: string }) =>
+                        `- [${m.role}] ${m.content}`
+                )
+                .join("\n")
+            : "No workspace conversation available.";
+
+        const featuresSummary = Array.isArray(features) && features.length > 0
+            ? features.map((f: string) => `- ${f}`).join("\n")
+            : "No explicit feature list provided.";
+
+        const constraintsSummary = constraints
+            ? Object.entries(constraints)
+                .map(([key, value]) => `- ${key}: ${Array.isArray(value) ? value.join(", ") : String(value)}`)
+                .join("\n")
+            : "No explicit constraints provided.";
 
         const result = await generateText({
             model: getPrimaryTextModel(),
@@ -51,42 +93,25 @@ ${connectionsSummary}
 SCORES:
 ${scoresSummary}
 
-Generate a detailed prompt pack with the following sections. Each prompt should be ready to paste into an AI coding tool like Cursor, Claude, or Lovable.
+FEATURES:
+${featuresSummary}
 
-FORMAT:
-# ${projectName} — Implementation Prompt Pack
+CONSTRAINTS:
+${constraintsSummary}
 
-## Prompt 1: Project Scaffolding
-[Prompt for setting up the project, installing dependencies, and basic configuration]
+USER IDEA + PLAN DISCUSSION (ideation thread):
+${ideationSummary}
 
-## Prompt 2: Authentication Setup
-[Prompt for auth, if applicable]
+WORKSPACE CHAT CONTEXT:
+${workspaceConversationSummary}
 
-## Prompt 3: Database Schema & Backend
-[Prompt for data schema and backend functions]
-
-## Prompt 4: Core Features
-[Prompt for main feature implementation]
-
-## Prompt 5: AI Integration
-[Prompt for AI features, if applicable]
-
-## Prompt 6: Frontend & UI
-[Prompt for pages, components, and styling]
-
-## Prompt 7: Testing & Deployment
-[Prompt for testing and deployment setup]
-
-For each prompt include:
-- Goal
-- Files to create/update
-- Expected outputs
-- Acceptance checks
-
-Make the prompts specific to the architecture components used. Reference actual providers, services, and tech choices.`,
+Important:
+- Tailor the report to the exact stack/components above
+- If information is missing, state assumptions explicitly
+- Keep it implementation-oriented and understandable for non-experts.`,
         });
 
-        return Response.json({ promptPack: result.text });
+        return Response.json({ reportMarkdown: result.text, promptPack: result.text });
     } catch (error) {
         console.error("Export API error:", error);
         return new Response("Export failed. Please check AZURE_OPENAI_API_KEY_GPT_5_MINI and AZURE_OPENAI_ENDPOINT_GPT_5_MINI.", {

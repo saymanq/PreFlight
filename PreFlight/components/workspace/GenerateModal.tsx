@@ -125,7 +125,7 @@ export function GenerateModal({
                     <Button
                         onClick={handleGenerate}
                         disabled={!prompt.trim() || isGenerating}
-                        className="w-full gap-2"
+                        className="w-full gap-2 btn-gradient"
                     >
                         {isGenerating ? (
                             <>

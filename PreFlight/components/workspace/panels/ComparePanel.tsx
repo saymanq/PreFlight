@@ -101,7 +101,7 @@ export default function ComparePanel() {
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-2">
+        <h3 className="text-sm font-semibold gradient-text uppercase tracking-wider flex items-center gap-2">
           <GitCompare className="w-4 h-4" />
           Compare Strategies
         </h3>
@@ -137,7 +137,7 @@ export default function ComparePanel() {
           <button
             onClick={generateVariants}
             disabled={loading || nodes.length === 0}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--radius-md)] text-xs font-semibold bg-gradient-to-r from-[var(--accent)] to-[var(--secondary)] text-white hover:shadow-[var(--clay-glow)] transition-all disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--radius-md)] text-xs font-semibold btn-gradient"
           >
             {loading ? (
               "Generating..."

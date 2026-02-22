@@ -45,7 +45,7 @@ export default function ScoresPanel() {
 
   return (
     <div className="p-4 space-y-5">
-      <h3 className="text-sm font-semibold text-[var(--text-primary)] uppercase tracking-wider">Architecture Scores</h3>
+      <h3 className="text-sm font-semibold gradient-text uppercase tracking-wider">Architecture Scores</h3>
 
       {/* Overall */}
       <div className="clay-sm p-4 text-center">

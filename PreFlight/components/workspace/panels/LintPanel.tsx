@@ -170,7 +170,7 @@ export default function LintPanel() {
         className={`p-4 space-y-4 overflow-y-auto max-h-full ${hasPending ? "pointer-events-none opacity-20" : ""}`}
       >
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-[var(--text-primary)] uppercase tracking-wider">
+          <h3 className="text-sm font-semibold gradient-text uppercase tracking-wider">
             Architecture Lint
           </h3>
           {fixableCount > 0 && (

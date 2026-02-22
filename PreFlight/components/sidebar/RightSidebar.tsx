@@ -8,7 +8,7 @@ import ScoresPanel from "../workspace/panels/ScoresPanel";
 import LintPanel from "../workspace/panels/LintPanel";
 import ComparePanel from "../workspace/panels/ComparePanel";
 import ExportPanel from "../workspace/panels/ExportPanel";
-import { Radar, ShieldCheck, MessageSquare, DollarSign, Lightbulb, GitCompare, FileOutput } from "lucide-react";
+import { Radar, ShieldCheck, MessageSquare, DollarSign, Lightbulb } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type RightSidebarTab = "scores" | "lint" | "compare" | "export" | "chat" | "cost" | "suggestions";
@@ -37,8 +37,6 @@ export default function RightSidebar({
   const tabs: { id: RightSidebarTab; label: string; icon: React.ElementType }[] = [
     { id: "scores", label: "Scores", icon: Radar },
     { id: "lint", label: "Lint", icon: ShieldCheck },
-    { id: "compare", label: "Compare", icon: GitCompare },
-    { id: "export", label: "Export", icon: FileOutput },
     { id: "chat", label: "AI", icon: MessageSquare },
     { id: "cost", label: "Cost", icon: DollarSign },
     { id: "suggestions", label: "Tips", icon: Lightbulb },
@@ -55,7 +53,7 @@ export default function RightSidebar({
             className={cn(
               "flex-1 flex items-center justify-center gap-1 px-1.5 py-2.5 text-[10px] font-medium transition-colors whitespace-nowrap min-w-0",
               activeTab === tab.id
-                ? "bg-[var(--bg-primary)] text-[var(--accent)] border-b-2 border-[var(--accent)]"
+                ? "bg-[var(--bg-primary)] text-[var(--accent)] gradient-tab-active"
                 : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
             )}
           >
@@ -70,7 +68,12 @@ export default function RightSidebar({
         {activeTab === "scores" && <ScoresPanel />}
         {activeTab === "lint" && <LintPanel />}
         {activeTab === "compare" && <ComparePanel />}
-        {activeTab === "export" && <ExportPanel />}
+        {activeTab === "export" && (
+          <ExportPanel
+            projectId={projectId}
+            sourceIdeationSnapshot={sourceIdeationSnapshot}
+          />
+        )}
         {activeTab === "chat" && (
           <Chatbot
             projectId={projectId}

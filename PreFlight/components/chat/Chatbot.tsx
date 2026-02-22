@@ -250,7 +250,7 @@ export default function Chatbot({ projectId, sourceIdeationSnapshot = [] }: Chat
         <div>
           <div className="flex items-center gap-2">
             <Bot className="w-5 h-5 text-[var(--primary)]" />
-            <h3 className="text-sm font-semibold text-[var(--foreground)]">AI Architect</h3>
+            <h3 className="text-sm font-semibold gradient-text">AI Architect</h3>
           </div>
           <p className="text-xs text-[var(--foreground-secondary)] mt-1">
             Uses this workspace and your ideation context as hidden memory
@@ -290,7 +290,7 @@ export default function Chatbot({ projectId, sourceIdeationSnapshot = [] }: Chat
                 <div
                   className={`max-w-[80%] px-4 py-2 rounded-xl ${
                     message.role === "user"
-                      ? "bg-[#99f6e4] text-black"
+                      ? "bg-[#008000] text-white"
                       : "glass border border-[var(--glass-border)] text-[var(--foreground)]"
                   }`}
                 >
