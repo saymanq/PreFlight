@@ -1,21 +1,17 @@
 <div align="center">
 
-<img src="assets/logo.png" width="140" height="140">
 
 # PreFlight
 
 ### The Architecture Planning Engine That Thinks Before You Build
 
-[![Stars](https://img.shields.io/github/stars/dwseoh/Quota?style=for-the-badge&logo=github&color=0d1117&labelColor=161b22)](https://github.com/dwseoh/Quota&label=stars)
-[![Forks](https://img.shields.io/github/forks/dwseoh/Quota?style=for-the-badge&logo=git&color=0d1117&labelColor=161b22)](https://github.com/dwseoh/Quota/network/members&label=forks)
+
 
 **Innovation shouldn't come with a surprise bill.**
 
 <br/>
 
-<kbd>
-<img src="assets/sandbox_flow.png" width="720" alt="PreFlight Architecture Engine">
-</kbd>
+
 
 </div>
 
