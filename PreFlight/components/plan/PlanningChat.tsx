@@ -584,7 +584,7 @@ export default function PlanningChat() {
         content: trimmed,
       });
 
-      const response = await sendPlanMessage(nextMessages);
+      const response = await sendPlanMessage(nextMessages, artifact);
       const assistantText = stripHiddenContent(response.message || response.assistantMessage || "");
       const artifactFromResponse = response.artifact ?? null;
       const componentIds = normalizeComponentIds(
@@ -981,7 +981,7 @@ export default function PlanningChat() {
                 />
                 <div className="flex justify-between items-center px-2 pb-1">
                   <span className="text-[11px] text-[var(--plan-text-muted)] px-2 py-1 rounded-md bg-[var(--plan-bg-chip)]">
-                    Gemini
+                    Azure GPT-5.2
                   </span>
                   <button
                     type="button"

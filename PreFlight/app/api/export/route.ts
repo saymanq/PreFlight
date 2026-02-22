@@ -1,9 +1,9 @@
-import { google } from "@ai-sdk/google";
 import { generateText } from "ai";
 import {
     FAST_OUTPUT_TOKENS,
+    getPrimaryTextModel,
     LOW_REASONING_PROVIDER_OPTIONS,
-} from "@/lib/ai/google-generation";
+} from "@/lib/ai/azure-openai";
 
 export async function POST(req: Request) {
     try {
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
             : "No scores available";
 
         const result = await generateText({
-            model: google("gemini-3-flash-preview"),
+            model: getPrimaryTextModel(),
             maxOutputTokens: FAST_OUTPUT_TOKENS.exportPack,
             providerOptions: LOW_REASONING_PROVIDER_OPTIONS,
             prompt: `You are an expert software architect. Generate a comprehensive implementation prompt pack for the following architecture.
@@ -89,7 +89,7 @@ Make the prompts specific to the architecture components used. Reference actual 
         return Response.json({ promptPack: result.text });
     } catch (error) {
         console.error("Export API error:", error);
-        return new Response("Export failed. Please check your GOOGLE_GENERATIVE_AI_API_KEY.", {
+        return new Response("Export failed. Please check AZURE_OPENAI_API_KEY_GPT_5_MINI and AZURE_OPENAI_ENDPOINT_GPT_5_MINI.", {
             status: 500,
         });
     }

@@ -112,6 +112,7 @@ export interface PlanChatResponse {
 
 export async function sendPlanMessage(
   messages: PlanMessage[],
+  artifact?: IdeationArtifact | null,
   _sessionId?: string
 ): Promise<PlanChatResponse> {
   const response = await fetch(`/api/chat/ideation`, {
@@ -119,6 +120,7 @@ export async function sendPlanMessage(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      artifact: artifact ?? null,
     }),
   });
 

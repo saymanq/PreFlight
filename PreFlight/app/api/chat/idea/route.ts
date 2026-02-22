@@ -1,5 +1,4 @@
 import { streamText } from "ai";
-import { google } from "@ai-sdk/google";
 import {
     CATEGORY_ORDER,
     CATEGORY_LABELS,
@@ -7,8 +6,9 @@ import {
 } from "@/lib/component-catalog";
 import {
     FAST_OUTPUT_TOKENS,
+    getPrimaryTextModel,
     LOW_REASONING_PROVIDER_OPTIONS,
-} from "@/lib/ai/google-generation";
+} from "@/lib/ai/azure-openai";
 
 const CATALOG_CONTEXT = CATEGORY_ORDER.map((category) => {
     const examples = getComponentsByCategory(category)
@@ -87,9 +87,8 @@ export async function POST(req: Request) {
         const { messages } = await req.json();
 
         const result = streamText({
-            model: google("gemini-3-flash-preview"),
+            model: getPrimaryTextModel(),
             system: SYSTEM_PROMPT,
-            temperature: 0.4,
             maxOutputTokens: FAST_OUTPUT_TOKENS.ideaStream,
             providerOptions: LOW_REASONING_PROVIDER_OPTIONS,
             messages: messages.map((m: { role: string; content: string }) => ({
@@ -102,7 +101,7 @@ export async function POST(req: Request) {
     } catch (error) {
         console.error("Idea chat API error:", error);
         return new Response(
-            "Chat error. Please check your GOOGLE_GENERATIVE_AI_API_KEY.",
+            "Chat error. Please check AZURE_OPENAI_API_KEY_GPT_5_MINI and AZURE_OPENAI_ENDPOINT_GPT_5_MINI.",
             { status: 500 }
         );
     }

@@ -1,10 +1,10 @@
 import { generateObject } from "ai";
-import { google } from "@ai-sdk/google";
 import { COMPONENT_LIBRARY } from "@/lib/components-data";
 import {
     FAST_OUTPUT_TOKENS,
+    getPrimaryTextModel,
     LOW_REASONING_PROVIDER_OPTIONS,
-} from "@/lib/ai/google-generation";
+} from "@/lib/ai/azure-openai";
 import {
     COMPONENT_CATALOG,
     CATEGORY_ORDER,
@@ -97,6 +97,9 @@ function buildComponentDetails(componentIds: string[]): string {
 
 const SLIM_CATALOG = buildSlimCatalog();
 
+const nullableString = z.string().nullable();
+const nullableNumber = z.number().nullable();
+
 function summarizeMessages(messages: WorkspaceMessage[] | undefined, heading: string): string {
     if (!messages || messages.length === 0) return "";
     const lines = messages
@@ -104,6 +107,22 @@ function summarizeMessages(messages: WorkspaceMessage[] | undefined, heading: st
         .map((message) => `- ${message.role === "user" ? "User" : "Assistant"}: ${message.content}`)
         .join("\n");
     return `\n${heading}:\n${lines}`;
+}
+
+function isLengthOrParseError(error: unknown): boolean {
+    const err = error as {
+        message?: string;
+        finishReason?: string;
+        cause?: { message?: string };
+    };
+    const message = `${err?.message ?? ""} ${err?.cause?.message ?? ""}`.toLowerCase();
+    return (
+        err?.finishReason === "length" ||
+        message.includes("no object generated") ||
+        message.includes("json parsing failed") ||
+        message.includes("unterminated string") ||
+        message.includes("could not parse the response")
+    );
 }
 
 const actionSchema = z
@@ -117,18 +136,18 @@ const actionSchema = z
             "remove_connection",
             "clear_canvas",
         ]),
-        componentId: z.string().optional(),
-        nodeId: z.string().optional(),
-        id: z.string().optional(),
-        label: z.string().optional(),
-        newLabel: z.string().optional(),
-        sourceId: z.string().optional(),
-        targetId: z.string().optional(),
-        edgeId: z.string().optional(),
-        x: z.number().optional(),
-        y: z.number().optional(),
-        relationshipType: z.string().optional(),
-        protocol: z.string().optional(),
+        componentId: nullableString,
+        nodeId: nullableString,
+        id: nullableString,
+        label: nullableString,
+        newLabel: nullableString,
+        sourceId: nullableString,
+        targetId: nullableString,
+        edgeId: nullableString,
+        x: nullableNumber,
+        y: nullableNumber,
+        relationshipType: nullableString,
+        protocol: nullableString,
     })
     .passthrough();
 
@@ -596,29 +615,54 @@ export async function POST(req: Request) {
             actions: z.array(actionSchema).describe("Canvas mutations to apply. Return empty array [] if just discussing/planning."),
             updatedScope: z
                 .object({
-                    users: z.number().optional(),
-                    trafficLevel: z.number().optional(),
-                    dataVolumeGB: z.number().optional(),
-                    regions: z.number().optional(),
-                    availability: z.number().optional(),
+                    users: nullableNumber,
+                    trafficLevel: nullableNumber,
+                    dataVolumeGB: nullableNumber,
+                    regions: nullableNumber,
+                    availability: nullableNumber,
                 })
-                .partial()
-                .optional()
+                .nullable()
                 .describe("Optional scope updates if the user's requirements imply scale changes."),
         });
 
-        const result = await generateObject({
-            model: google("gemini-3-flash-preview"),
-            schema: responseSchema,
-            system: systemPrompt,
-            prompt: contextBlock,
-            temperature: 0.4,
-            maxOutputTokens: FAST_OUTPUT_TOKENS.workspace,
-            providerOptions: LOW_REASONING_PROVIDER_OPTIONS,
-        });
+        const callStructured = async (promptText: string, maxTokens: number) =>
+            generateObject({
+                model: getPrimaryTextModel(),
+                schema: responseSchema,
+                system: systemPrompt,
+                prompt: promptText,
+                maxOutputTokens: maxTokens,
+                providerOptions: LOW_REASONING_PROVIDER_OPTIONS,
+            });
+
+        let result;
+        try {
+            result = await callStructured(contextBlock, FAST_OUTPUT_TOKENS.workspace);
+        } catch (primaryError) {
+            if (!isLengthOrParseError(primaryError)) {
+                throw primaryError;
+            }
+
+            const compactRetryPrompt = `${contextBlock}
+
+IMPORTANT OUTPUT LIMITS:
+- assistantMessage must be concise (<= 120 words).
+- Return at most 8 actions.
+- Prefer high-impact connections/changes only.`;
+
+            result = await callStructured(
+                compactRetryPrompt,
+                FAST_OUTPUT_TOKENS.workspaceRetry
+            );
+        }
 
         const { assistantMessage, actions, updatedScope } = result.object;
         const parsedActions = (actions as CanvasAction[]) ?? [];
+        const normalizedScope = updatedScope
+            ? Object.fromEntries(
+                  Object.entries(updatedScope).filter(([, value]) => value != null)
+              )
+            : undefined;
 
         const { nodes: nextNodes, edges: nextEdges, changed, cleared } = applyCanvasActions(
             nodes,
@@ -632,7 +676,7 @@ export async function POST(req: Request) {
             suggest_implementation: false,
             canvas_action: changed ? (cleared ? "clear" : "update") : "none",
             updated_architecture: changed ? { nodes: nextNodes, edges: nextEdges } : undefined,
-            updated_scope: updatedScope,
+            updated_scope: normalizedScope,
         });
     } catch (error) {
         console.error("Workspace chat API error:", error);

@@ -35,7 +35,7 @@ const FEATURES = [
   {
     icon: <Sparkles className="h-5 w-5" />,
     title: "AI Generation",
-    description: "Describe your app idea and Gemini generates a complete, validated architecture in seconds.",
+    description: "Describe your app idea and Azure OpenAI GPT-5.2 generates a complete, validated architecture in seconds.",
     color: "from-purple-500 to-pink-500",
   },
   {

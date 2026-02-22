@@ -141,7 +141,7 @@ export function GenerateModal({
                     </Button>
 
                     <p className="text-[10px] text-muted-foreground text-center">
-                        Uses Gemini to generate an architecture based on your prompt and constraints
+                        Uses Azure OpenAI GPT-5.2 to generate architecture from your prompt and constraints
                     </p>
                 </div>
             </DialogContent>

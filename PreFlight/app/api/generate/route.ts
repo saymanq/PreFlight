@@ -1,14 +1,19 @@
-import { google } from "@ai-sdk/google";
 import { generateObject } from "ai";
 import { z } from "zod";
 import { COMPONENT_LIBRARY } from "@/lib/components-data";
 import {
   FAST_OUTPUT_TOKENS,
+  getPrimaryTextModel,
   LOW_REASONING_PROVIDER_OPTIONS,
-} from "@/lib/ai/google-generation";
+} from "@/lib/ai/azure-openai";
 
 const ARTIFACT_MARKER_REGEX = /<pf_artifact>([\s\S]*?)<\/pf_artifact>/i;
 const MAX_GENERATION_ATTEMPTS = 3;
+const GENERATION_TOKEN_BUDGETS = [
+  FAST_OUTPUT_TOKENS.architectureGenerate,
+  5200,
+  8200,
+] as const;
 
 const COMPONENT_META_BY_ID = new Map(
   COMPONENT_LIBRARY.flatMap((category) =>
@@ -50,45 +55,57 @@ const CATEGORY_ORDER = [
   "gaming",
 ];
 
+const nullableString = z.string().nullable();
+const nullableNumber = z.number().nullable();
+
 const artifactSchema = z.object({
-  ideaSummary: z.string().optional(),
-  mustHaveFeatures: z.array(z.string()).default([]),
-  niceToHaveFeatures: z.array(z.string()).default([]),
-  openQuestions: z.array(z.string()).default([]),
-  constraints: z
-    .object({
-      budgetLevel: z.string().optional(),
-      teamSize: z.number().optional(),
-      timeline: z.string().optional(),
-      trafficExpectation: z.string().optional(),
-      dataSensitivity: z.string().optional(),
-      regionCount: z.number().optional(),
-      uptimeTarget: z.number().optional(),
-      devExperienceGoal: z.string().optional(),
-    })
-    .default({}),
+  ideaSummary: nullableString,
+  mustHaveFeatures: z.array(z.string()),
+  niceToHaveFeatures: z.array(z.string()),
+  openQuestions: z.array(z.string()),
+  constraints: z.object({
+    budgetLevel: nullableString,
+    teamSize: nullableNumber,
+    timeline: nullableString,
+    trafficExpectation: nullableString,
+    dataSensitivity: nullableString,
+    regionCount: nullableNumber,
+    uptimeTarget: nullableNumber,
+    devExperienceGoal: nullableString,
+  }),
 });
 
 const architectureSchema = z.object({
-  nodes: z.array(
-    z.object({
-      id: z.string().optional(),
-      componentId: z.string().describe("Must be one of the known component ids"),
-    })
-  ),
+  nodes: z
+    .array(
+      z.object({
+        id: nullableString,
+        componentId: z.string().describe("Must be one of the known component ids"),
+      })
+    )
+    .min(4)
+    .max(14),
   edges: z
     .array(
       z.object({
-        id: z.string().optional(),
+        id: nullableString,
         source: z.string().describe("Use node id or component id"),
         target: z.string().describe("Use node id or component id"),
-        relationshipType: z.string().optional(),
-        protocol: z.string().optional(),
+        relationshipType: z
+          .string()
+          .max(24)
+          .nullable()
+          .describe("Short label like invokes/reads/writes/auth/hosts/deploys"),
+        protocol: z
+          .string()
+          .max(20)
+          .nullable()
+          .describe("Short label like http/https/rpc/sql/ws/s3/event/none"),
       })
     )
-    .default([]),
-  rationale: z.string().default(""),
-  assumptions: z.array(z.string()).default([]),
+    .max(22),
+  rationale: z.string().max(280),
+  assumptions: z.array(z.string().max(120)).max(4),
 });
 
 type GeneratedNode = {
@@ -116,6 +133,17 @@ type GeneratedEdge = {
     relationshipType: string;
     protocol: string;
   };
+};
+
+type GraphBuildDiagnostics = {
+  modelEdgesRaw: number;
+  modelEdgesResolved: number;
+  usedHeuristicBootstrap: boolean;
+  disconnectedComponentsBeforeRepair: number;
+  isolatedNodesBeforeRepair: number;
+  repairEdgesAdded: number;
+  disconnectedComponentsAfterRepair: number;
+  isolatedNodesAfterRepair: number;
 };
 
 function uniqueValidComponentIds(values: unknown): string[] {
@@ -161,6 +189,8 @@ function buildHeuristicEdges(nodes: GeneratedNode[]): GeneratedEdge[] {
   for (const fe of byCategory("frontend")) {
     for (const be of byCategory("backend")) pushEdge(fe, be, "invokes", "HTTP");
     for (const auth of byCategory("auth")) pushEdge(fe, auth, "authenticates", "HTTP");
+    for (const hosting of byCategory("hosting")) pushEdge(fe, hosting, "hosts", "HTTPS");
+    for (const monitoring of byCategory("monitoring")) pushEdge(fe, monitoring, "reports", "HTTPS");
   }
   for (const be of byCategory("backend")) {
     for (const db of byCategory("database")) pushEdge(be, db, "reads/writes", "RPC");
@@ -169,9 +199,262 @@ function buildHeuristicEdges(nodes: GeneratedNode[]): GeneratedEdge[] {
     for (const queue of byCategory("messaging")) pushEdge(be, queue, "queues", "RPC");
     for (const cache of byCategory("realtime")) pushEdge(be, cache, "publishes", "WebSocket");
     for (const storage of byCategory("storage")) pushEdge(be, storage, "stores", "HTTP");
+    for (const search of byCategory("search")) pushEdge(be, search, "queries", "HTTP");
+    for (const payments of byCategory("payments")) pushEdge(be, payments, "charges", "HTTPS");
+    for (const monitoring of byCategory("monitoring")) pushEdge(be, monitoring, "reports", "HTTPS");
+  }
+  for (const cicd of byCategory("cicd")) {
+    for (const hosting of byCategory("hosting")) pushEdge(cicd, hosting, "deploys", "CI");
   }
 
   return edges;
+}
+
+function buildAdjacency(
+  nodes: GeneratedNode[],
+  edges: GeneratedEdge[]
+): Map<string, Set<string>> {
+  const adjacency = new Map<string, Set<string>>();
+  for (const node of nodes) adjacency.set(node.id, new Set<string>());
+  for (const edge of edges) {
+    if (!adjacency.has(edge.source) || !adjacency.has(edge.target)) continue;
+    adjacency.get(edge.source)!.add(edge.target);
+    adjacency.get(edge.target)!.add(edge.source);
+  }
+  return adjacency;
+}
+
+function getConnectedComponents(nodes: GeneratedNode[], edges: GeneratedEdge[]): string[][] {
+  const adjacency = buildAdjacency(nodes, edges);
+  const seen = new Set<string>();
+  const components: string[][] = [];
+
+  for (const node of nodes) {
+    if (seen.has(node.id)) continue;
+    const queue = [node.id];
+    const component: string[] = [];
+    seen.add(node.id);
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      component.push(current);
+      const neighbors = adjacency.get(current);
+      if (!neighbors) continue;
+      for (const neighbor of neighbors) {
+        if (seen.has(neighbor)) continue;
+        seen.add(neighbor);
+        queue.push(neighbor);
+      }
+    }
+
+    components.push(component);
+  }
+
+  return components;
+}
+
+function countIsolatedNodes(nodes: GeneratedNode[], edges: GeneratedEdge[]): number {
+  const adjacency = buildAdjacency(nodes, edges);
+  let isolated = 0;
+  for (const node of nodes) {
+    if ((adjacency.get(node.id)?.size ?? 0) === 0) isolated += 1;
+  }
+  return isolated;
+}
+
+function componentAnchorScore(category: string): number {
+  const idx = CATEGORY_ORDER.indexOf(category);
+  return idx >= 0 ? CATEGORY_ORDER.length - idx : 0;
+}
+
+function pickAnchorNode(
+  ids: string[],
+  nodeById: Map<string, GeneratedNode>
+): GeneratedNode | null {
+  const nodes = ids
+    .map((id) => nodeById.get(id))
+    .filter((node): node is GeneratedNode => Boolean(node));
+  if (nodes.length === 0) return null;
+  return nodes
+    .slice()
+    .sort((a, b) => componentAnchorScore(b.data.category) - componentAnchorScore(a.data.category))[0];
+}
+
+function hasUndirectedEdge(
+  edges: GeneratedEdge[],
+  a: string,
+  b: string
+): boolean {
+  return edges.some(
+    (edge) =>
+      (edge.source === a && edge.target === b) ||
+      (edge.source === b && edge.target === a)
+  );
+}
+
+function relationForPair(
+  sourceCategory: string,
+  targetCategory: string
+): { relationshipType: string; protocol: string } {
+  if (sourceCategory === "frontend" && targetCategory === "backend") {
+    return { relationshipType: "invokes", protocol: "HTTP" };
+  }
+  if (sourceCategory === "frontend" && targetCategory === "auth") {
+    return { relationshipType: "authenticates", protocol: "HTTPS" };
+  }
+  if (sourceCategory === "frontend" && targetCategory === "hosting") {
+    return { relationshipType: "hosts", protocol: "HTTPS" };
+  }
+  if (sourceCategory === "backend" && targetCategory === "database") {
+    return { relationshipType: "reads/writes", protocol: "SQL" };
+  }
+  if (sourceCategory === "backend" && targetCategory === "storage") {
+    return { relationshipType: "stores", protocol: "HTTPS" };
+  }
+  if (sourceCategory === "backend" && targetCategory === "search") {
+    return { relationshipType: "queries", protocol: "HTTP" };
+  }
+  if (sourceCategory === "backend" && targetCategory === "payments") {
+    return { relationshipType: "charges", protocol: "HTTPS" };
+  }
+  if (sourceCategory === "backend" && targetCategory === "monitoring") {
+    return { relationshipType: "reports", protocol: "HTTPS" };
+  }
+  if (sourceCategory === "cicd" && targetCategory === "hosting") {
+    return { relationshipType: "deploys", protocol: "CI" };
+  }
+  return { relationshipType: "links", protocol: "RPC" };
+}
+
+function chooseDirection(
+  partner: GeneratedNode,
+  anchor: GeneratedNode
+): { source: GeneratedNode; target: GeneratedNode } {
+  if (anchor.data.category === "frontend") {
+    return { source: anchor, target: partner };
+  }
+  if (anchor.data.category === "backend") {
+    if (partner.data.category === "frontend") {
+      return { source: partner, target: anchor };
+    }
+    return { source: anchor, target: partner };
+  }
+  if (anchor.data.category === "cicd") {
+    return { source: anchor, target: partner };
+  }
+  return { source: partner, target: anchor };
+}
+
+function choosePartnerFromRoot(
+  rootIds: Set<string>,
+  nodeById: Map<string, GeneratedNode>,
+  anchorCategory: string
+): GeneratedNode | null {
+  const rootNodes = [...rootIds]
+    .map((id) => nodeById.get(id))
+    .filter((node): node is GeneratedNode => Boolean(node));
+  if (rootNodes.length === 0) return null;
+
+  const byCategory = (category: string) =>
+    rootNodes.find((node) => node.data.category === category) ?? null;
+
+  if (anchorCategory === "frontend") {
+    return byCategory("backend") ?? byCategory("api") ?? rootNodes[0];
+  }
+  if (anchorCategory === "backend") {
+    return byCategory("frontend") ?? byCategory("hosting") ?? rootNodes[0];
+  }
+  if (anchorCategory === "cicd") {
+    return byCategory("hosting") ?? byCategory("frontend") ?? byCategory("backend") ?? rootNodes[0];
+  }
+  if (anchorCategory === "hosting") {
+    return byCategory("frontend") ?? byCategory("backend") ?? rootNodes[0];
+  }
+  return byCategory("backend") ?? byCategory("frontend") ?? rootNodes[0];
+}
+
+function repairDisconnectedGraph(
+  nodes: GeneratedNode[],
+  edges: GeneratedEdge[]
+): {
+  edges: GeneratedEdge[];
+  disconnectedComponentsBeforeRepair: number;
+  isolatedNodesBeforeRepair: number;
+  repairEdgesAdded: number;
+  disconnectedComponentsAfterRepair: number;
+  isolatedNodesAfterRepair: number;
+} {
+  if (nodes.length <= 1) {
+    return {
+      edges,
+      disconnectedComponentsBeforeRepair: 1,
+      isolatedNodesBeforeRepair: 0,
+      repairEdgesAdded: 0,
+      disconnectedComponentsAfterRepair: 1,
+      isolatedNodesAfterRepair: 0,
+    };
+  }
+
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const componentsBefore = getConnectedComponents(nodes, edges);
+  const isolatedBefore = countIsolatedNodes(nodes, edges);
+  const repairedEdges = [...edges];
+  let repairEdgesAdded = 0;
+
+  if (componentsBefore.length > 1) {
+    const rootComponent =
+      componentsBefore
+        .slice()
+        .sort((a, b) => {
+          const aAnchor = pickAnchorNode(a, nodeById);
+          const bAnchor = pickAnchorNode(b, nodeById);
+          const aScore = (aAnchor ? componentAnchorScore(aAnchor.data.category) : 0) + a.length;
+          const bScore = (bAnchor ? componentAnchorScore(bAnchor.data.category) : 0) + b.length;
+          return bScore - aScore;
+        })[0] ?? componentsBefore[0];
+    const rootIds = new Set(rootComponent);
+
+    for (const componentIds of componentsBefore) {
+      if (componentIds === rootComponent) continue;
+
+      const anchor = pickAnchorNode(componentIds, nodeById);
+      if (!anchor) continue;
+
+      const partner = choosePartnerFromRoot(rootIds, nodeById, anchor.data.category);
+      if (!partner || partner.id === anchor.id) continue;
+      if (hasUndirectedEdge(repairedEdges, partner.id, anchor.id)) {
+        for (const id of componentIds) rootIds.add(id);
+        continue;
+      }
+
+      const { source, target } = chooseDirection(partner, anchor);
+      const rel = relationForPair(source.data.category, target.data.category);
+      repairedEdges.push({
+        id: `edge-repair-${repairedEdges.length + 1}`,
+        source: source.id,
+        target: target.id,
+        type: "custom",
+        sourceHandle: "bottom",
+        targetHandle: "top",
+        animated: true,
+        data: rel,
+      });
+      repairEdgesAdded += 1;
+      for (const id of componentIds) rootIds.add(id);
+    }
+  }
+
+  const componentsAfter = getConnectedComponents(nodes, repairedEdges);
+  const isolatedAfter = countIsolatedNodes(nodes, repairedEdges);
+
+  return {
+    edges: repairedEdges,
+    disconnectedComponentsBeforeRepair: componentsBefore.length,
+    isolatedNodesBeforeRepair: isolatedBefore,
+    repairEdgesAdded,
+    disconnectedComponentsAfterRepair: componentsAfter.length,
+    isolatedNodesAfterRepair: isolatedAfter,
+  };
 }
 
 function applyLayout(nodes: GeneratedNode[], edges: GeneratedEdge[]): GeneratedNode[] {
@@ -342,9 +625,21 @@ async function generateWithRetries(
   let lastError: unknown = null;
 
   for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt += 1) {
+    const tokenBudget =
+      GENERATION_TOKEN_BUDGETS[Math.min(attempt - 1, GENERATION_TOKEN_BUDGETS.length - 1)];
+    const compactnessRules =
+      attempt === 1
+        ? ""
+        : `
+STRICT COMPACT MODE:
+- Keep node ids and edge ids short (n1, n2, e1, e2).
+- Keep relationshipType to 1 short token when possible.
+- Keep protocol to one of: http, https, rpc, sql, ws, s3, event, none.
+- Keep rationale to 1-2 short sentences.
+- Keep assumptions to max 2 short bullets.`;
     try {
       return await generateObject({
-        model: google("gemini-3-flash-preview"),
+        model: getPrimaryTextModel(),
         schema: architectureSchema,
         prompt: `You are an expert software architect. Build a practical architecture graph.
 
@@ -366,9 +661,12 @@ RULES:
 2. Use valid component ids only.
 3. If required components are provided, include all of them.
 4. Add realistic edges showing dependency/data flow.
-5. Keep architecture implementation-ready.`,
-        temperature: 0.2,
-        maxOutputTokens: FAST_OUTPUT_TOKENS.architectureGenerate,
+5. Use 8-16 edges unless fewer are needed.
+6. Keep relationshipType and protocol short and machine-friendly.
+7. In edges.source and edges.target, prefer component IDs (not abstract IDs) for reliable mapping.
+8. Keep architecture implementation-ready.
+${compactnessRules}`,
+        maxOutputTokens: tokenBudget,
         providerOptions: LOW_REASONING_PROVIDER_OPTIONS,
       });
     } catch (error) {
@@ -384,11 +682,17 @@ RULES:
 function buildGraphFromModel(
   result: z.infer<typeof architectureSchema>,
   selectedComponentIds: string[]
-): { nodes: GeneratedNode[]; edges: GeneratedEdge[] } {
-  const modelNodeIds = result.nodes
-    .map((node) => String(node.componentId || "").trim().toLowerCase())
-    .filter((componentId, index, all) => componentId && all.indexOf(componentId) === index)
-    .filter((componentId) => VALID_COMPONENT_IDS.has(componentId));
+): { nodes: GeneratedNode[]; edges: GeneratedEdge[]; diagnostics: GraphBuildDiagnostics } {
+  const modelNodeEntries = result.nodes
+    .map((node, index) => ({
+      modelId: (node.id?.trim().toLowerCase() || `n${index + 1}`).trim(),
+      componentId: String(node.componentId || "").trim().toLowerCase(),
+    }))
+    .filter((node) => node.modelId.length > 0 && VALID_COMPONENT_IDS.has(node.componentId));
+
+  const modelNodeIds = modelNodeEntries
+    .map((node) => node.componentId)
+    .filter((componentId, index, all) => all.indexOf(componentId) === index);
 
   const requiredComponentIds = selectedComponentIds.length > 0 ? selectedComponentIds : [];
   const mergedComponentIds = [
@@ -404,10 +708,20 @@ function buildGraphFromModel(
       firstNodeByComponentId.set(node.data.componentId, node);
     }
   }
+  const modelIdToGeneratedNodeId = new Map<string, string>();
+  for (const modelNode of modelNodeEntries) {
+    const mappedNode = firstNodeByComponentId.get(modelNode.componentId);
+    if (!mappedNode) continue;
+    modelIdToGeneratedNodeId.set(modelNode.modelId, mappedNode.id);
+  }
 
   const resolveRef = (value: string): string | null => {
-    if (nodeById.has(value)) return value;
-    const byComponent = firstNodeByComponentId.get(value);
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return null;
+    if (nodeById.has(normalized)) return normalized;
+    const byModelNode = modelIdToGeneratedNodeId.get(normalized);
+    if (byModelNode) return byModelNode;
+    const byComponent = firstNodeByComponentId.get(normalized);
     if (byComponent) return byComponent.id;
     return null;
   };
@@ -439,9 +753,25 @@ function buildGraphFromModel(
     });
   }
 
-  const finalizedEdges = edges.length > 0 ? edges : buildHeuristicEdges(nodes);
-  const laidOutNodes = applyLayout(nodes, finalizedEdges);
-  return { nodes: laidOutNodes, edges: finalizedEdges };
+  const usedHeuristicBootstrap = edges.length === 0;
+  const bootstrapEdges = usedHeuristicBootstrap ? buildHeuristicEdges(nodes) : edges;
+  const repaired = repairDisconnectedGraph(nodes, bootstrapEdges);
+  const laidOutNodes = applyLayout(nodes, repaired.edges);
+
+  return {
+    nodes: laidOutNodes,
+    edges: repaired.edges,
+    diagnostics: {
+      modelEdgesRaw: result.edges.length,
+      modelEdgesResolved: edges.length,
+      usedHeuristicBootstrap,
+      disconnectedComponentsBeforeRepair: repaired.disconnectedComponentsBeforeRepair,
+      isolatedNodesBeforeRepair: repaired.isolatedNodesBeforeRepair,
+      repairEdgesAdded: repaired.repairEdgesAdded,
+      disconnectedComponentsAfterRepair: repaired.disconnectedComponentsAfterRepair,
+      isolatedNodesAfterRepair: repaired.isolatedNodesAfterRepair,
+    },
+  };
 }
 
 function buildDeterministicFallback(componentIds: string[]): { nodes: GeneratedNode[]; edges: GeneratedEdge[] } {
@@ -483,6 +813,7 @@ export async function POST(req: Request) {
       edges: graph.edges,
       rationale: result.object.rationale,
       assumptions: result.object.assumptions,
+      generationDiagnostics: graph.diagnostics,
       usedFallback: false,
       source: "llm",
     });
@@ -503,6 +834,16 @@ export async function POST(req: Request) {
       assumptions: [
         "Scaffold was generated from selected components and baseline architecture rules.",
       ],
+      generationDiagnostics: {
+        modelEdgesRaw: 0,
+        modelEdgesResolved: 0,
+        usedHeuristicBootstrap: true,
+        disconnectedComponentsBeforeRepair: getConnectedComponents(fallback.nodes, fallback.edges).length,
+        isolatedNodesBeforeRepair: countIsolatedNodes(fallback.nodes, fallback.edges),
+        repairEdgesAdded: 0,
+        disconnectedComponentsAfterRepair: getConnectedComponents(fallback.nodes, fallback.edges).length,
+        isolatedNodesAfterRepair: countIsolatedNodes(fallback.nodes, fallback.edges),
+      },
       usedFallback: true,
       source: "deterministic_scaffold",
     });

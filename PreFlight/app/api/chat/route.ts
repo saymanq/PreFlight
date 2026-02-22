@@ -1,5 +1,4 @@
 import { streamText } from "ai";
-import { google } from "@ai-sdk/google";
 import {
     COMPONENT_CATALOG,
     CATEGORY_ORDER,
@@ -10,8 +9,9 @@ import {
 import { ALL_COMPONENTS } from "@/lib/scoring/component-weights";
 import {
     FAST_OUTPUT_TOKENS,
+    getPrimaryTextModel,
     LOW_REASONING_PROVIDER_OPTIONS,
-} from "@/lib/ai/google-generation";
+} from "@/lib/ai/azure-openai";
 
 const META_BY_KEY = new Map(ALL_COMPONENTS.map((m) => [m.key, m]));
 
@@ -203,7 +203,7 @@ Format: key | name | provider | tier/maturity | scores | best-for | avoid-when
 ${CATALOG_BLOCK}`;
 
         const result = streamText({
-            model: google("gemini-3-flash-preview"),
+            model: getPrimaryTextModel(),
             system: systemPrompt,
             maxOutputTokens: FAST_OUTPUT_TOKENS.chatStream,
             providerOptions: LOW_REASONING_PROVIDER_OPTIONS,
@@ -216,7 +216,7 @@ ${CATALOG_BLOCK}`;
         return result.toTextStreamResponse();
     } catch (error) {
         console.error("Chat API error:", error);
-        return new Response("AI chat error. Please check your GOOGLE_GENERATIVE_AI_API_KEY.", {
+        return new Response("AI chat error. Please check AZURE_OPENAI_API_KEY_GPT_5_MINI and AZURE_OPENAI_ENDPOINT_GPT_5_MINI.", {
             status: 500,
         });
     }

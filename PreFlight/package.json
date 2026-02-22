@@ -11,7 +11,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@ai-sdk/google": "^3.0.30",
+    "@ai-sdk/azure": "^3.0.31",
     "@clerk/clerk-react": "^5.60.0",
     "@clerk/nextjs": "^6.37.3",
     "@xyflow/react": "^12.10.1",
