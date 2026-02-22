@@ -90,7 +90,7 @@ export async function POST(req: Request) {
     }).join("\n");
 
     const result = await generateText({
-      model: google("gemini-3.1-pro-preview"),
+      model: google("gemini-3-flash-preview"),
       system: `You are Preflight, a principal software architect helping users shape ideas before building.
 
 Your job:

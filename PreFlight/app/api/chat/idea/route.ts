@@ -83,7 +83,7 @@ export async function POST(req: Request) {
         const { messages } = await req.json();
 
         const result = streamText({
-            model: google("gemini-3.1-pro-preview"),
+            model: google("gemini-3-flash-preview"),
             system: SYSTEM_PROMPT,
             temperature: 0.4,
             maxOutputTokens: 1500,

@@ -101,7 +101,7 @@ Available Component Types:
 ${availableComponents}`;
 
         const result = streamText({
-            model: google("gemini-3.1-pro-preview"),
+            model: google("gemini-3-flash-preview"),
             system: systemPrompt,
             messages: messages.map((m: { role: string; content: string }) => ({
                 role: m.role as "user" | "assistant",

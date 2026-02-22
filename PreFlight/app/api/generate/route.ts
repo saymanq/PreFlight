@@ -64,7 +64,7 @@ async function generateWithRetries(prompt: string, constraints: Record<string, s
     for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt += 1) {
         try {
             return await generateObject({
-                model: google("gemini-3.1-pro-preview"),
+                model: google("gemini-3-flash-preview"),
                 schema: architectureSchema,
                 prompt: `You are an expert software architect. Generate an architecture graph.
 

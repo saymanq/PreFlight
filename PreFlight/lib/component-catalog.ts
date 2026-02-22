@@ -1169,7 +1169,7 @@ export const COMPONENT_CATALOG: ComponentDef[] = [
         complexityHint: 2,
         costHint: "Medium",
         capabilities: ["chat", "multimodal", "tool_calling", "embeddings"],
-        defaultConfig: { model: "gemini-3.1-pro-preview" },
+        defaultConfig: { model: "gemini-3-flash-preview" },
         baseWeights: BW.aiCore,
     },
     {

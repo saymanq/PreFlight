@@ -518,7 +518,7 @@ ${summarizeMessages(conversation_history, "Workspace chat history")}`;
 
     try {
       const structured = await generateObject({
-        model: google("gemini-3.1-pro-preview"),
+        model: google("gemini-3-flash-preview"),
         schema: actionPlanSchema,
         system: systemPrompt,
         prompt,
@@ -531,7 +531,7 @@ ${summarizeMessages(conversation_history, "Workspace chat history")}`;
     } catch {
       // Fallback: return a text-only assistant response if structured generation fails.
       const textResult = await generateText({
-        model: google("gemini-3.1-pro-preview"),
+        model: google("gemini-3-flash-preview"),
         system:
           "You are the Preflight workspace assistant. Give concise, actionable guidance for the user's architecture.",
         messages: [
