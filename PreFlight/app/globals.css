@@ -218,3 +218,107 @@ main {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Friend-style workspace/dashboard theme variables */
+:root {
+  --bg-primary: #0c0c14;
+  --bg-secondary: #13131f;
+  --bg-elevated: #1a1a2e;
+  --bg-surface: #1e1e34;
+  --bg-hover: #262645;
+
+  --text-primary: #f0f0f8;
+  --text-secondary: #a0a0be;
+  --text-muted: #60607a;
+  --text-inverse: #0c0c14;
+
+  --accent: #00d4ff;
+  --accent-hover: #00b8e6;
+  --accent-muted: rgb(0 212 255 / 15%);
+  --secondary: #7c3aed;
+  --secondary-hover: #6d28d9;
+
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #3b82f6;
+
+  --border-hover: rgb(255 255 255 / 12%);
+  --glass-bg: rgb(20 20 36 / 75%);
+  --glass-border: rgb(255 255 255 / 6%);
+  --glass-blur: 14px;
+
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-full: 9999px;
+}
+
+[data-theme="plan"] {
+  --plan-bg: #0c0c0c;
+  --plan-bg-card: #1c1c1e;
+  --plan-bg-card-hover: #242426;
+  --plan-bg-input: #1c1c1e;
+  --plan-bg-chip: #1e1e20;
+  --plan-bg-chip-hover: #2a2a2e;
+  --plan-bg-selected: #2a2a1e;
+  --plan-border: #2a2a2c;
+  --plan-border-light: #333336;
+  --plan-border-focus: #4a4a3a;
+  --plan-text: #e8e6e3;
+  --plan-text-secondary: #8e8e93;
+  --plan-text-muted: #636366;
+  --plan-text-inverse: #0c0c0c;
+  --plan-accent: #c9a84c;
+  --plan-accent-soft: rgb(201 168 76 / 12%);
+  --plan-accent-hover: #d4b65c;
+  --plan-success: #34c759;
+}
+
+.clay {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 6px 6px 14px rgb(0 0 0 / 35%), -3px -3px 10px rgb(255 255 255 / 2.5%);
+}
+
+.clay-interactive {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 6px 6px 14px rgb(0 0 0 / 35%), -3px -3px 10px rgb(255 255 255 / 2.5%);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.clay-interactive:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-hover);
+}
+
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: var(--radius-full);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.chip:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-hover);
+}

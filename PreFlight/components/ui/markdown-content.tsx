@@ -134,7 +134,7 @@ export function MarkdownContent({ content, className }: MarkdownContentProps) {
             pushParagraph(paragraphBuffer);
             const level = headingMatch[1].length;
             const headingText = headingMatch[2];
-            const Heading = `h${level}` as keyof JSX.IntrinsicElements;
+            const Heading = `h${level}` as keyof React.JSX.IntrinsicElements;
             const headingClass =
                 level <= 2
                     ? "text-base font-semibold"

@@ -1,434 +1,253 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import React, { useEffect, useState, useRef, useCallback } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
+import { ReactFlowProvider } from "@xyflow/react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Id } from "@/convex/_generated/dataModel";
-import { ReactFlowProvider } from "@xyflow/react";
-import { Canvas } from "@/components/workspace/Canvas";
-import { ComponentSidebar } from "@/components/workspace/ComponentSidebar";
-import { RightPanel } from "@/components/workspace/RightPanel";
-import { Toolbar } from "@/components/workspace/Toolbar";
-import { ConstraintsBar } from "@/components/workspace/ConstraintsBar";
-import { ExportModal } from "@/components/workspace/ExportModal";
-import { CompareModal } from "@/components/workspace/CompareModal";
-import { IdeaChat } from "@/components/project/IdeaChat";
-import { useWorkspaceStore, type ArchNode, type ArchEdge } from "@/lib/store";
-import { runScoring } from "@/lib/scoring-engine";
-import { runLint } from "@/lib/lint-engine";
-import { Loader2, Sparkles } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import ArchitectureCanvas from "@/components/canvas/ArchitectureCanvas";
+import ComponentLibrary from "@/components/sidebar/ComponentLibrary";
+import RightSidebar, { type RightSidebarTab } from "@/components/sidebar/RightSidebar";
+import { useArchitectureStore } from "@/lib/architecture-store";
+import { scoreArchitecture } from "@/lib/scoring/score-engine";
+import { runLinter } from "@/lib/linting/lint-engine";
+import {
+  ArrowLeft,
+  Sparkles,
+  GitCompare,
+  ShieldCheck,
+  FileOutput,
+  Undo2,
+  Redo2,
+  Check,
+  Loader2,
+} from "lucide-react";
 
 export default function ProjectWorkspacePage() {
-    const params = useParams();
-    const router = useRouter();
-    const projectId = params.projectId as string;
+  const { projectId } = useParams<{ projectId: string }>();
+  const project = useQuery(
+    api.projects.get,
+    projectId ? { id: projectId as any } : "skip"
+  );
+  const updateGraph = useMutation(api.projects.updateGraph);
+  const updateMeta = useMutation(api.projects.updateMeta);
 
-    const project = useQuery(api.projects.getById, {
-        projectId: projectId as Id<"projects">,
-    });
-    const updateMeta = useMutation(api.projects.updateMeta);
-    const saveGraph = useMutation(api.projects.saveGraph);
-    const updateConstraints = useMutation(api.projects.updateConstraints);
-    const saveScoresAndLint = useMutation(api.projects.saveScoresAndLint);
-    const transitionToArchitecture = useMutation(api.projects.transitionToArchitecture);
+  const [projectName, setProjectName] = useState("Untitled Project");
+  const [editingName, setEditingName] = useState(false);
+  const [saved, setSaved] = useState(true);
+  const [rightTab, setRightTab] = useState<RightSidebarTab>("scores");
+  const [hydrated, setHydrated] = useState(false);
 
-    const {
-        nodes,
-        edges,
-        setNodes,
-        setEdges,
-        isDirty,
-        setIsDirty,
-        setIsSaving,
-    } = useWorkspaceStore();
+  const nodes = useArchitectureStore((s) => s.nodes);
+  const edges = useArchitectureStore((s) => s.edges);
+  const setNodes = useArchitectureStore((s) => s.setNodes);
+  const setEdges = useArchitectureStore((s) => s.setEdges);
+  const setProjectNameInStore = useArchitectureStore((s) => s.setProjectName);
+  const constraints = useArchitectureStore((s) => s.constraints);
+  const setScores = useArchitectureStore((s) => s.setScores);
+  const setLintIssues = useArchitectureStore((s) => s.setLintIssues);
 
-    const [showExport, setShowExport] = useState(false);
-    const [showCompare, setShowCompare] = useState(false);
-    const [isAutoGenerating, setIsAutoGenerating] = useState(false);
-    const [scores, setScores] = useState<Record<string, { score: number; explanation: string }> | null>(null);
-    const [lintIssues, setLintIssues] = useState<Array<{
-        code: string;
-        severity: string;
-        title: string;
-        description: string;
-        targets: string[];
-        suggestedFix: string;
-    }> | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const analysisTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialHydrationDone = useRef(false);
 
-    const initializedRef = useRef(false);
-    const saveTimeoutRef = useRef<NodeJS.Timeout>(undefined);
-    const scoreLintSaveTimeoutRef = useRef<NodeJS.Timeout>(undefined);
-    const autoGenTriggeredRef = useRef(false);
-
-    // Determine current phase
-    const phase = project?.phase ?? "architecture"; // default to architecture for legacy projects
-    const currentConstraints = useMemo(
-        () => (project?.constraints as Record<string, string>) ?? {},
-        [project?.constraints]
-    );
-    const currentConstraintsKey = useMemo(
-        () => JSON.stringify(currentConstraints),
-        [currentConstraints]
-    );
-
-    // Initialize canvas from project data (architecture phase only)
-    useEffect(() => {
-        if (project && phase === "architecture" && !initializedRef.current) {
-            const projectGraph = project.graph as { nodes: ArchNode[]; edges: ArchEdge[] } | undefined;
-            setNodes(projectGraph?.nodes ?? []);
-            setEdges(projectGraph?.edges ?? []);
-            if (project.scores) {
-                setScores(project.scores as Record<string, { score: number; explanation: string }>);
-            }
-            if (project.lintIssues) {
-                setLintIssues(project.lintIssues as Array<{
-                    code: string;
-                    severity: string;
-                    title: string;
-                    description: string;
-                    targets: string[];
-                    suggestedFix: string;
-                }>);
-            }
-            initializedRef.current = true;
-            setIsDirty(false);
-        }
-    }, [project, phase, setNodes, setEdges, setIsDirty]);
-
-    // Debounced save (architecture phase)
-    useEffect(() => {
-        if (!isDirty || !initializedRef.current || phase !== "architecture") return;
-
-        if (saveTimeoutRef.current) {
-            clearTimeout(saveTimeoutRef.current);
-        }
-
-        saveTimeoutRef.current = setTimeout(async () => {
-            setIsSaving(true);
-            try {
-                await saveGraph({
-                    projectId: projectId as Id<"projects">,
-                    graph: { nodes, edges },
-                });
-                setIsDirty(false);
-            } catch (err) {
-                console.error("Save failed:", err);
-            } finally {
-                setIsSaving(false);
-            }
-        }, 1500);
-
-        return () => {
-            if (saveTimeoutRef.current) {
-                clearTimeout(saveTimeoutRef.current);
-            }
-        };
-    }, [isDirty, nodes, edges, projectId, phase, saveGraph, setIsDirty, setIsSaving]);
-
-    const computeAndPersistScoresAndLint = useCallback(
-        async (
-            graphNodes: ArchNode[],
-            graphEdges: ArchEdge[],
-            constraintValues: Record<string, string>
-        ) => {
-            const newScores = runScoring(graphNodes, graphEdges, constraintValues);
-            const newLintIssues = runLint(graphNodes, graphEdges, constraintValues);
-            setScores(newScores);
-            setLintIssues(newLintIssues);
-
-            await saveScoresAndLint({
-                projectId: projectId as Id<"projects">,
-                scores: newScores,
-                lintIssues: newLintIssues,
-            });
-        },
-        [projectId, saveScoresAndLint]
-    );
-
-    // Auto-generate architecture after transition
-    const autoGenerate = useCallback(async (ideaPrompt: string, constraints: Record<string, string>) => {
-        if (autoGenTriggeredRef.current) return;
-        autoGenTriggeredRef.current = true;
-        setIsAutoGenerating(true);
-
-        try {
-            const response = await fetch("/api/generate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ prompt: ideaPrompt, constraints }),
-            });
-
-            if (!response.ok) throw new Error("Generation failed");
-
-            const result = await response.json();
-            const newNodes = result.nodes ?? [];
-            setNodes(newNodes);
-            setEdges(result.edges ?? []);
-            setIsDirty(true);
-            initializedRef.current = true;
-
-            // Save immediately
-            await saveGraph({
-                projectId: projectId as Id<"projects">,
-                graph: { nodes: newNodes, edges: result.edges ?? [] },
-            });
-
-        } catch (err) {
-            console.error("Auto-generate failed:", err);
-            // Allow retry after failure instead of permanently blocking auto-generate.
-            autoGenTriggeredRef.current = false;
-        } finally {
-            setIsAutoGenerating(false);
-        }
-    }, [projectId, saveGraph, setNodes, setEdges, setIsDirty]);
-
-    // Watch for newly transitioned projects that need auto-generation
-    useEffect(() => {
-        if (
-            project &&
-            phase === "architecture" &&
-            !autoGenTriggeredRef.current
-        ) {
-            const graph = project.graph as { nodes: ArchNode[]; edges: ArchEdge[] } | undefined;
-            const hasNodes = (graph?.nodes?.length ?? 0) > 0;
-
-            // If we just transitioned and there are no nodes yet, auto-generate
-            if (!hasNodes && project.ideaPrompt) {
-                autoGenerate(
-                    project.ideaPrompt,
-                    currentConstraints
-                );
-            }
-        }
-    }, [project, phase, autoGenerate, currentConstraints]);
-
-    // Recompute scores/lint in realtime as the graph changes, then persist debounced.
-    useEffect(() => {
-        if (phase !== "architecture" || !initializedRef.current) return;
-        const constraintsForRealtime = JSON.parse(currentConstraintsKey) as Record<string, string>;
-
-        const currentNodes = nodes as ArchNode[];
-        const currentEdges = edges as ArchEdge[];
-
-        const newScores = runScoring(currentNodes, currentEdges, constraintsForRealtime);
-        const newLintIssues = runLint(currentNodes, currentEdges, constraintsForRealtime);
-        setScores(newScores);
-        setLintIssues(newLintIssues);
-
-        if (scoreLintSaveTimeoutRef.current) {
-            clearTimeout(scoreLintSaveTimeoutRef.current);
-        }
-
-        scoreLintSaveTimeoutRef.current = setTimeout(() => {
-            saveScoresAndLint({
-                projectId: projectId as Id<"projects">,
-                scores: newScores,
-                lintIssues: newLintIssues,
-            }).catch((err) => {
-                console.error("Realtime score/lint save failed:", err);
-            });
-        }, 800);
-
-        return () => {
-            if (scoreLintSaveTimeoutRef.current) {
-                clearTimeout(scoreLintSaveTimeoutRef.current);
-            }
-        };
-    }, [nodes, edges, currentConstraintsKey, phase, projectId, saveScoresAndLint]);
-
-    // Handle transition from chat to architecture
-    const handleTransitionToArchitecture = useCallback(
-        async (extractedContext: {
-            appIdea?: string;
-            features?: string[];
-            constraints?: Record<string, string>;
-        }) => {
-            try {
-                await transitionToArchitecture({
-                    projectId: projectId as Id<"projects">,
-                    extractedContext,
-                });
-                // Project will reactively update, re-rendering with architecture phase
-            } catch (err) {
-                console.error("Transition failed:", err);
-                throw err;
-            }
-        },
-        [projectId, transitionToArchitecture]
-    );
-
-    // Run scoring and linting
-    const handleLint = useCallback(() => {
-        computeAndPersistScoresAndLint(
-            nodes as ArchNode[],
-            edges as ArchEdge[],
-            currentConstraints
-        ).catch(console.error);
-    }, [nodes, edges, currentConstraints, computeAndPersistScoresAndLint]);
-
-    const handleConstraintsUpdate = useCallback(
-        async (newConstraints: Record<string, string | undefined>) => {
-            try {
-                await updateConstraints({
-                    projectId: projectId as Id<"projects">,
-                    constraints: newConstraints as {
-                        budgetLevel?: string;
-                        teamSize?: string;
-                        timeline?: string;
-                        trafficExpectation?: string;
-                        dataSensitivity?: string;
-                        regionCount?: string;
-                        uptimeTarget?: string;
-                        devExperiencePreference?: string;
-                        providerPreferences?: string[];
-                    },
-                });
-            } catch (err) {
-                console.error("Constraints update failed:", err);
-            }
-        },
-        [projectId, updateConstraints]
-    );
-
-    const handleRenameProject = useCallback(
-        async (name: string) => {
-            await updateMeta({
-                projectId: projectId as Id<"projects">,
-                name,
-            });
-        },
-        [projectId, updateMeta]
-    );
-
-    // Loading state
-    if (project === undefined) {
-        return (
-            <div className="flex items-center justify-center min-h-screen">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            </div>
-        );
+  useEffect(() => {
+    if (project && !initialHydrationDone.current) {
+      setProjectName(project.name);
+      setProjectNameInStore(project.name);
+      if (project.graph?.nodes?.length) setNodes(project.graph.nodes as any);
+      if (project.graph?.edges?.length) setEdges(project.graph.edges as any);
+      initialHydrationDone.current = true;
+      setHydrated(true);
     }
+  }, [project, setNodes, setEdges, setProjectNameInStore]);
 
-    if (project === null) {
-        router.push("/dashboard");
-        return null;
+  const debouncedSaveGraph = useCallback(() => {
+    if (!projectId || !initialHydrationDone.current) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setSaved(false);
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        await updateGraph({
+          projectId: projectId as any,
+          graph: { nodes: nodes as any, edges: edges as any },
+        });
+        setSaved(true);
+      } catch {
+        // save failed silently
+      }
+    }, 1500);
+  }, [projectId, nodes, edges, updateGraph]);
+
+  useEffect(() => {
+    if (hydrated) debouncedSaveGraph();
+  }, [nodes, edges, hydrated, debouncedSaveGraph]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (analysisTimerRef.current) clearTimeout(analysisTimerRef.current);
+
+    analysisTimerRef.current = setTimeout(() => {
+      const nextScores = scoreArchitecture(nodes as any[], edges as any[], constraints as any);
+      const nextLintIssues = runLinter(nodes as any[], edges as any[], constraints as any);
+      setScores(nextScores as any);
+      setLintIssues(nextLintIssues as any);
+    }, 120);
+
+    return () => {
+      if (analysisTimerRef.current) clearTimeout(analysisTimerRef.current);
+    };
+  }, [nodes, edges, constraints, hydrated, setScores, setLintIssues]);
+
+  function handleNameBlur() {
+    setEditingName(false);
+    if (projectId && projectName.trim()) {
+      updateMeta({ projectId: projectId as any, name: projectName.trim() });
     }
+  }
 
-    // ─────────────────────────────────────────
-    // CHAT PHASE
-    // ─────────────────────────────────────────
-    if (phase === "chat") {
-        return (
-            <IdeaChat
-                projectId={projectId}
-                projectName={project.name}
-                initialMessages={
-                    (project.chatHistory as Array<{
-                        role: "user" | "assistant";
-                        content: string;
-                        createdAt: number;
-                    }>) ?? undefined
-                }
-                onTransitionToArchitecture={handleTransitionToArchitecture}
-            />
-        );
-    }
-
-    // ─────────────────────────────────────────
-    // ARCHITECTURE PHASE
-    // ─────────────────────────────────────────
+  if (project === undefined) {
     return (
-        <ReactFlowProvider>
-            <div className="h-screen flex flex-col overflow-hidden">
-                {/* Auto-generate overlay */}
-                <AnimatePresence>
-                    {isAutoGenerating && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-50 bg-background/80 backdrop-blur-md flex flex-col items-center justify-center"
-                        >
-                            <motion.div
-                                initial={{ scale: 0.9, opacity: 0 }}
-                                animate={{ scale: 1, opacity: 1 }}
-                                exit={{ scale: 0.9, opacity: 0 }}
-                                className="flex flex-col items-center gap-4"
-                            >
-                                <div className="p-4 rounded-2xl bg-primary/10 border border-primary/20">
-                                    <Sparkles className="h-8 w-8 text-primary animate-pulse" />
-                                </div>
-                                <h2 className="text-xl font-semibold">Generating your architecture</h2>
-                                <p className="text-sm text-muted-foreground max-w-md text-center">
-                                    Building a tailored architecture based on your conversation. This
-                                    usually takes 10-20 seconds...
-                                </p>
-                                <Loader2 className="h-5 w-5 animate-spin text-primary mt-2" />
-                            </motion.div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
-                {/* Toolbar */}
-                <Toolbar
-                    projectName={project.name}
-                    onRenameProject={handleRenameProject}
-                    onCompare={() => setShowCompare(true)}
-                    onLint={handleLint}
-                    onExport={() => setShowExport(true)}
-                />
-
-                {/* Main workspace */}
-                <div className="flex-1 flex overflow-hidden">
-                    {/* Left sidebar */}
-                    <ComponentSidebar projectId={projectId} />
-
-                    {/* Canvas */}
-                    <Canvas />
-
-                    {/* Right panel */}
-                    <RightPanel
-                        projectId={projectId}
-                        priorIdeaMessages={
-                            (project.chatHistory as Array<{
-                                role: "user" | "assistant";
-                                content: string;
-                                createdAt: number;
-                            }>) ?? []
-                        }
-                        constraints={currentConstraints}
-                        scores={scores}
-                        lintIssues={lintIssues}
-                    />
-                </div>
-
-                {/* Bottom constraints bar */}
-                <ConstraintsBar
-                    constraints={currentConstraints}
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    onUpdate={handleConstraintsUpdate as any}
-                />
-
-                {/* Export Modal */}
-                <ExportModal
-                    open={showExport}
-                    onOpenChange={setShowExport}
-                    projectName={project.name}
-                    nodes={nodes}
-                    edges={edges}
-                    scores={scores}
-                    lintIssues={lintIssues}
-                />
-
-                {/* Compare Modal */}
-                <CompareModal
-                    open={showCompare}
-                    onOpenChange={setShowCompare}
-                    projectId={projectId}
-                />
-            </div>
-        </ReactFlowProvider>
+      <div className="flex h-screen items-center justify-center bg-[var(--bg-primary)]">
+        <Loader2 className="w-6 h-6 animate-spin text-[var(--text-muted)]" />
+      </div>
     );
+  }
+
+  if (project === null) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-[var(--bg-primary)]">
+        <p className="text-[var(--text-secondary)]">Project not found.</p>
+        <Link href="/projects" className="text-[var(--accent)] hover:underline text-sm">
+          Back to Dashboard
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <ReactFlowProvider>
+      <div className="flex flex-col h-screen bg-[var(--bg-primary)]">
+        {/* Top Toolbar */}
+        <header className="h-12 flex items-center gap-2 px-3 glass border-b border-[var(--border)] z-20 shrink-0">
+          <Link
+            href="/projects"
+            className="p-1.5 rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
+
+          <div className="w-7 h-7 rounded-md bg-gradient-to-br from-[var(--accent)] to-[var(--secondary)] flex items-center justify-center text-white font-bold text-xs">
+            P
+          </div>
+
+          {editingName ? (
+            <input
+              autoFocus
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+              onBlur={handleNameBlur}
+              onKeyDown={(e) => e.key === "Enter" && handleNameBlur()}
+              className="text-sm font-semibold bg-transparent text-[var(--text-primary)] border-b border-[var(--accent)] outline-none px-1"
+            />
+          ) : (
+            <button
+              onClick={() => setEditingName(true)}
+              className="text-sm font-semibold text-[var(--text-primary)] hover:text-[var(--accent)] transition-colors px-1"
+            >
+              {projectName}
+            </button>
+          )}
+
+          <div className="w-px h-5 bg-[var(--border)] mx-1" />
+
+          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] text-xs font-medium bg-gradient-to-r from-[var(--accent)] to-[var(--secondary)] text-white hover:shadow-[var(--clay-glow)] transition-all">
+            <Sparkles className="w-3.5 h-3.5" />
+            Generate
+          </button>
+          <button
+            onClick={() => setRightTab("compare")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] text-xs font-medium transition-colors ${rightTab === "compare" ? "bg-[var(--bg-hover)] text-[var(--accent)]" : "text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"}`}
+          >
+            <GitCompare className="w-3.5 h-3.5" />
+            Compare
+          </button>
+          <button
+            onClick={() => setRightTab("lint")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] text-xs font-medium transition-colors ${rightTab === "lint" ? "bg-[var(--bg-hover)] text-[var(--accent)]" : "text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"}`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            Lint
+          </button>
+          <button
+            onClick={() => setRightTab("export")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] text-xs font-medium transition-colors ${rightTab === "export" ? "bg-[var(--bg-hover)] text-[var(--accent)]" : "text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"}`}
+          >
+            <FileOutput className="w-3.5 h-3.5" />
+            Export
+          </button>
+
+          <div className="flex-1" />
+
+          <button className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
+            <Undo2 className="w-3.5 h-3.5" />
+          </button>
+          <button className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
+            <Redo2 className="w-3.5 h-3.5" />
+          </button>
+
+          <div className="w-px h-5 bg-[var(--border)] mx-1" />
+
+          <span className="flex items-center gap-1 text-xs text-[var(--text-muted)]">
+            {saved ? <Check className="w-3 h-3 text-[var(--success)]" /> : <Loader2 className="w-3 h-3 animate-spin" />}
+            {saved ? "Saved" : "Saving..."}
+          </span>
+        </header>
+
+        {/* Main Content: Left Sidebar | Canvas | Right Panel */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Left Sidebar */}
+          <aside className="w-[280px] border-r border-[var(--border)] bg-[var(--bg-secondary)] overflow-y-auto shrink-0">
+            <ComponentLibrary />
+          </aside>
+
+          {/* Center Canvas */}
+          <main className="flex-1 relative">
+            <ArchitectureCanvas />
+          </main>
+
+          {/* Right Panel */}
+          <aside className="w-[360px] border-l border-[var(--border)] bg-[var(--bg-secondary)] overflow-y-auto shrink-0">
+            <RightSidebar
+              activeTab={rightTab}
+              onTabChange={setRightTab}
+              projectId={projectId}
+              sourceIdeationSnapshot={(project.sourceIdeationSnapshot as any) ?? []}
+            />
+          </aside>
+        </div>
+
+        {/* Bottom Constraints Bar */}
+        <footer className="h-10 flex items-center gap-2 px-4 border-t border-[var(--border)] bg-[var(--bg-secondary)] overflow-x-auto shrink-0">
+          <span className="text-xs text-[var(--text-muted)] shrink-0">Constraints:</span>
+          {[
+            { label: `Users: ${project.constraints?.teamSize ?? 1}K`, icon: "👥" },
+            { label: `Traffic: ${project.constraints?.trafficExpectation ?? "Medium"}`, icon: "📊" },
+            { label: `Budget: ${project.constraints?.budgetLevel ?? "Medium"}`, icon: "💰" },
+            { label: `Timeline: ${project.constraints?.timeline ?? "1month"}`, icon: "⏱️" },
+            { label: `Team: ${project.constraints?.teamSize ?? 2}`, icon: "👥" },
+            { label: `Regions: ${project.constraints?.regionCount ?? 1}`, icon: "🌍" },
+            { label: `Uptime: ${project.constraints?.uptimeTarget ?? 99}%`, icon: "📈" },
+            { label: `Priority: MVP Speed`, icon: "🎯" },
+          ].map((c) => (
+            <button key={c.label} className="chip shrink-0">
+              <span>{c.icon}</span>
+              {c.label}
+            </button>
+          ))}
+        </footer>
+      </div>
+    </ReactFlowProvider>
+  );
 }

@@ -86,7 +86,7 @@ export async function POST(req: Request) {
             model: google("gemini-3.1-pro-preview"),
             system: SYSTEM_PROMPT,
             temperature: 0.4,
-            maxTokens: 1500,
+            maxOutputTokens: 1500,
             messages: messages.map((m: { role: string; content: string }) => ({
                 role: m.role as "user" | "assistant",
                 content: m.content,
