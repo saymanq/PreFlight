@@ -439,10 +439,10 @@ export default function ProjectWorkspacePage() {
 
           {/* Right Panel — collapsible */}
           <aside
-            className="border-l border-[var(--border)] bg-[var(--bg-secondary)] overflow-y-auto overflow-x-hidden shrink-0 transition-[width] duration-300 ease-in-out"
+            className="border-l border-[var(--border)] bg-[var(--bg-secondary)] overflow-hidden shrink-0 transition-[width] duration-300 ease-in-out"
             style={{ width: rightSidebarOpen ? 360 : 0 }}
           >
-            <div className="w-[360px]">
+            <div className="w-[360px] h-full">
               <RightSidebar
                 activeTab={rightTab}
                 onTabChange={setRightTab}

@@ -186,6 +186,39 @@ export const archiveThread = mutation({
   },
 });
 
+export const clearWorkspaceThreadMessages = mutation({
+  args: {
+    projectId: v.id("projects"),
+  },
+  handler: async (ctx, args) => {
+    const user = await getOrCreateUser(ctx);
+
+    const project = await ctx.db.get(args.projectId);
+    if (!project) throw new Error("Project not found");
+    if (project.ownerId !== user._id) throw new Error("Not authorized");
+
+    const threads = await ctx.db
+      .query("chatThreads")
+      .withIndex("by_projectId", (q) => q.eq("projectId", args.projectId))
+      .collect();
+
+    const workspaceThread = threads
+      .filter((thread) => thread.threadType === "workspace" && !thread.archived)
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+
+    if (!workspaceThread) {
+      return { cleared: false, threadId: null };
+    }
+
+    await ctx.db.patch(workspaceThread._id, {
+      messages: [],
+      updatedAt: Date.now(),
+    });
+
+    return { cleared: true, threadId: workspaceThread._id };
+  },
+});
+
 export const createWorkspaceThreadForProject = mutation({
   args: {
     projectId: v.id("projects"),

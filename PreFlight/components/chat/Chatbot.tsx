@@ -46,6 +46,7 @@ export default function Chatbot({ projectId, sourceIdeationSnapshot = [] }: Chat
 
   const createWorkspaceThread = useMutation(api.chatThreads.createWorkspaceThreadForProject);
   const appendMessage = useMutation(api.chatThreads.appendMessage);
+  const clearWorkspaceThreadMessages = useMutation(api.chatThreads.clearWorkspaceThreadMessages);
 
   const [messages, setMessages] = useState<VisibleMessage[]>([]);
   const [input, setInput] = useState("");
@@ -99,11 +100,21 @@ export default function Chatbot({ projectId, sourceIdeationSnapshot = [] }: Chat
     prevNodeIdsRef.current = currentIds;
   }, [nodes]);
 
-  const handleClear = () => {
+  const handleClear = async () => {
     if (messages.length === 0) return;
-    if (confirm("Clear visible assistant messages for this workspace session?")) {
+    if (confirm("Clear visible workspace chat messages for this project?")) {
+      const previousMessages = messages;
       setMessages([]);
       recentActionsRef.current = [];
+
+      try {
+        await clearWorkspaceThreadMessages({
+          projectId: projectId as any,
+        });
+      } catch (error) {
+        console.error("Failed to clear workspace thread messages:", error);
+        setMessages(previousMessages);
+      }
     }
   };
 
@@ -245,7 +256,7 @@ export default function Chatbot({ projectId, sourceIdeationSnapshot = [] }: Chat
   };
 
   return (
-    <div ref={chatContainerRef} className="flex flex-col h-full">
+    <div ref={chatContainerRef} className="flex h-full min-h-0 flex-col">
       <div className="p-4 border-b border-[var(--border)] flex justify-between items-center">
         <div>
           <div className="flex items-center gap-2">
@@ -267,9 +278,9 @@ export default function Chatbot({ projectId, sourceIdeationSnapshot = [] }: Chat
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 ? (
-          <div className="text-center py-8">
+          <div className="flex min-h-full flex-col items-center justify-center text-center py-8">
             <Bot className="w-12 h-12 mx-auto mb-3 text-[var(--primary)]" />
             <p className="text-sm text-[var(--foreground-secondary)]">
               Ask for architecture improvements, fixes, and trade-offs.
@@ -326,7 +337,7 @@ export default function Chatbot({ projectId, sourceIdeationSnapshot = [] }: Chat
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 border-t border-[var(--border)]">
+      <div className="mt-auto p-4 border-t border-[var(--border)] shrink-0">
         <div className="flex gap-2">
           <textarea
             value={input}
